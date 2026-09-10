@@ -5,18 +5,20 @@ import { cancelOrder, getMyOrders, receiveOrder, STATUS_TEXT, type OrderVO } fro
 import { requestRefund } from '@/api/pay'
 
 const TABS = [
-  { label: '全部', value: undefined as number | undefined },
-  { label: '待支付', value: 0 },
-  { label: '已支付', value: 1 },
-  { label: '已发货', value: 2 },
-  { label: '已收货', value: 3 },
-  { label: '已取消', value: 4 },
+  { key: 'all', label: '全部', value: undefined as number | undefined },
+  { key: '0', label: '待支付', value: 0 },
+  { key: '1', label: '已支付', value: 1 },
+  { key: '2', label: '已发货', value: 2 },
+  { key: '3', label: '已收货', value: 3 },
+  { key: '4', label: '已取消', value: 4 },
 ]
 
 const orders = ref<OrderVO[]>([])
 const total = ref(0)
 const page = ref(1)
 const status = ref<number | undefined>(undefined)
+/** el-tabs 选中项（与 status 对应，string 类型便于绑定） */
+const activeKey = ref('all')
 const loading = ref(false)
 /** 各状态数量（顶部统计栏；undefined 为全部） */
 const counts = ref<Record<number, number>>({})
@@ -65,10 +67,16 @@ async function loadCounts() {
   }
 }
 
-function pickTab(v: number | undefined) {
-  status.value = v
+function pickTab(key: string) {
+  activeKey.value = key
+  status.value = key === 'all' ? undefined : Number(key)
   page.value = 1
   load()
+}
+
+/** el-tabs 切换回调 */
+function onTabChange(name: string | number) {
+  pickTab(String(name))
 }
 
 async function cancel(order: OrderVO) {
@@ -106,14 +114,20 @@ onMounted(() => {
     </header>
 
     <section class="stats">
-      <div v-for="t in TABS" :key="t.label" class="stat" @click="pickTab(t.value)">
+      <div
+        v-for="t in TABS"
+        :key="t.key"
+        class="stat"
+        :class="{ active: activeKey === t.key }"
+        @click="pickTab(t.key)"
+      >
         <span class="stat-num md-num">{{ t.value === undefined ? total : counts[t.value] ?? 0 }}</span>
         <span class="stat-label">{{ t.label }}</span>
       </div>
     </section>
 
-    <el-tabs v-model="status" class="tabs" @tab-change="() => {}">
-      <el-tab-pane v-for="t in TABS" :key="t.label" :name="t.value ?? 'all'" :label="t.label" />
+    <el-tabs v-model="activeKey" class="tabs" @tab-change="onTabChange">
+      <el-tab-pane v-for="t in TABS" :key="t.key" :name="t.key" :label="t.label" />
     </el-tabs>
 
     <el-skeleton v-if="loading" :rows="6" animated />
@@ -238,6 +252,11 @@ onMounted(() => {
 }
 .stat:hover {
   border-color: var(--mx-red);
+}
+.stat.active {
+  border-color: var(--mx-red);
+  background: #fff7f7;
+  box-shadow: 0 0 0 1px var(--mx-red);
 }
 .stat-num {
   font-size: 22px;

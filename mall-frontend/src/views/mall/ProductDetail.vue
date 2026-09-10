@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getProductDetail, type Sku } from '@/api/product'
 import { addToCart } from '@/api/cart'
+import { createOrder } from '@/api/order'
+import { getAddresses, type Address } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -54,15 +56,20 @@ async function load() {
   }
 }
 
-/** 点击规格值：合并已选项后按键值精确匹配 SKU，组合不存在则提示 */
+/** 点击规格值：先按键值精确匹配 SKU；若该组合不存在（SKU 未全排列），
+ *  则降级为"包含该规格值的任意 SKU"，联动其余维度，避免出现不可选的死锁组合 */
 function selectSpec(key: string, value: string) {
   const chosen = { ...selectedSpec.value, [key]: value }
-  const match = product.value?.skus.find((s) => {
+  const skus = product.value?.skus ?? []
+  let match = skus.find((s) => {
     const spec = specOf(s)
     return Object.entries(chosen).every(([k, v]) => spec[k] === v)
   })
+  if (!match) {
+    match = skus.find((s) => specOf(s)[key] === value)
+  }
   if (match) {
-    selectedSpec.value = chosen
+    selectedSpec.value = specOf(match)
     selectedSku.value = match
   } else {
     ElMessage.warning('该规格组合不可选，请更换搭配')
@@ -118,6 +125,85 @@ async function addCart() {
   }
 }
 
+// -----------------------------------------------------
+// 立即购买：选规格 → 选/填收货地址 → 下单 → 跳转支付
+// -----------------------------------------------------
+const buyDialog = ref(false)
+const buyReceiver = reactive({ name: '', phone: '', address: '' })
+const buyAddrList = ref<Address[]>([])
+const buySelectedAddrId = ref<number | null>(null)
+
+function buyAddrText(a: Address): string {
+  return [a.province, a.city, a.district, a.detail].filter(Boolean).join(' ')
+}
+
+function fillBuy(a: Address) {
+  buyReceiver.name = a.receiver
+  buyReceiver.phone = a.phone
+  buyReceiver.address = buyAddrText(a)
+}
+
+function selectBuyAddr(id: number | null) {
+  buySelectedAddrId.value = id
+  if (id == null) {
+    buyReceiver.name = ''
+    buyReceiver.phone = ''
+    buyReceiver.address = ''
+    return
+  }
+  const addr = buyAddrList.value.find((a) => a.id === id)
+  if (addr) fillBuy(addr)
+}
+
+async function buyNow() {
+  const sku = currentSku.value
+  if (!sku || !sku.id || !product.value) {
+    ElMessage.warning('请先选择规格')
+    return
+  }
+  if (!userStore.token) {
+    ElMessage.info('请先登录再购买')
+    router.push('/login')
+    return
+  }
+  buyReceiver.name = ''
+  buyReceiver.phone = ''
+  buyReceiver.address = ''
+  try {
+    buyAddrList.value = await getAddresses()
+  } catch {
+    buyAddrList.value = []
+  }
+  // 默认选中默认地址；无地址则手动填写
+  const def = buyAddrList.value.find((a) => a.isDefault === 1) ?? buyAddrList.value[0]
+  buySelectedAddrId.value = def?.id ?? null
+  if (def) fillBuy(def)
+  buyDialog.value = true
+}
+
+async function submitBuy() {
+  const sku = currentSku.value
+  if (!sku || !sku.id) return
+  if (!buyReceiver.name || !buyReceiver.phone || !buyReceiver.address) {
+    ElMessage.warning('请填写完整收货信息')
+    return
+  }
+  try {
+    const orderNos = await createOrder({
+      reqId: crypto.randomUUID(),
+      items: [{ skuId: sku.id, count: 1 }],
+      receiverName: buyReceiver.name,
+      receiverPhone: buyReceiver.phone,
+      receiverAddress: buyReceiver.address,
+      fromCart: false,
+    })
+    buyDialog.value = false
+    router.push(`/pay/${orderNos[0]}`)
+  } catch {
+    /* 拦截器统一提示 */
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -161,7 +247,7 @@ onMounted(load)
 
       <div class="actions">
         <el-button type="primary" size="large" class="btn-cart" @click="addCart">加入购物车</el-button>
-        <el-button size="large" class="btn-buy" @click="addCart">立即购买</el-button>
+        <el-button size="large" class="btn-buy" @click="buyNow">立即购买</el-button>
       </div>
 
       <router-link class="shop-card" :to="`/product/${product.id}`" @click.prevent>
@@ -175,6 +261,43 @@ onMounted(load)
 
       <router-link class="back" to="/">← 回到货架</router-link>
     </div>
+
+    <el-dialog v-model="buyDialog" title="确认收货信息（立即购买）" width="460">
+      <div class="addr-picker">
+        <p class="addr-title">选择收货地址</p>
+        <el-select
+          v-model="buySelectedAddrId"
+          class="addr-select"
+          placeholder="请选择收货地址"
+          clearable
+          @change="selectBuyAddr"
+        >
+          <el-option
+            v-for="a in buyAddrList"
+            :key="a.id"
+            :label="`${a.receiver} · ${a.phone} · ${buyAddrText(a)}${a.isDefault === 1 ? '（默认）' : ''}`"
+            :value="a.id"
+          />
+        </el-select>
+        <p v-if="!buyAddrList.length" class="addr-empty">暂无收货地址，请手动填写下方信息</p>
+      </div>
+
+      <el-form label-width="80px">
+        <el-form-item label="收货人">
+          <el-input v-model="buyReceiver.name" />
+        </el-form-item>
+        <el-form-item label="联系电话">
+          <el-input v-model="buyReceiver.phone" />
+        </el-form-item>
+        <el-form-item label="收货地址">
+          <el-input v-model="buyReceiver.address" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="buyDialog = false">取消</el-button>
+        <el-button type="primary" @click="submitBuy">确认下单</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -313,6 +436,24 @@ onMounted(load)
   background: var(--mx-red-soft);
   border-color: var(--mx-red);
   color: var(--mx-red);
+}
+
+/* 收货地址下拉 */
+.addr-picker {
+  margin-bottom: 14px;
+}
+.addr-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--mx-ink-2);
+}
+.addr-select {
+  width: 100%;
+}
+.addr-empty {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--mx-ink-2);
 }
 
 /* 店铺卡 */

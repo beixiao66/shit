@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCart, mergeCart, removeCart, updateCartChecked, updateCartCount, type CartItem } from '@/api/cart'
 import { createOrder } from '@/api/order'
+import { getAddresses, type Address } from '@/api/user'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -20,6 +21,10 @@ const checkoutDialog = ref(false)
 const payDialog = ref(false)
 const createdOrders = ref<string[]>([])
 const receiver = reactive({ name: '', phone: '', address: '' })
+/** 收货地址列表（结算时可下拉选择） */
+const addrList = ref<Address[]>([])
+/** 当前选中的地址 id；null 表示未选择（需手动填写） */
+const selectedAddrId = ref<number | null>(null)
 
 const isLogged = computed(() => !!userStore.token)
 const checkedItems = computed(() => items.value.filter((i) => i.checked === 1))
@@ -92,9 +97,12 @@ async function onCountChange(item: CartItem | GuestItem, count: number) {
     const g = list.find((i) => i.skuId === item.skuId)
     if (g) g.count = count
     writeGuestCart(list)
-    return
+  } else {
+    await updateCartCount(item.skuId, count)
   }
-  await updateCartCount(item.skuId, count)
+  // 同步本行数量，触发小计/合计联动更新
+  const local = items.value.find((i) => i.skuId === item.skuId)
+  if (local) local.count = count
 }
 
 async function onChecked(item: CartItem | GuestItem, checked: number) {
@@ -119,7 +127,30 @@ async function remove(item: CartItem | GuestItem) {
   await load()
 }
 
-function openCheckout() {
+function addrText(a: Address): string {
+  return [a.province, a.city, a.district, a.detail].filter(Boolean).join(' ')
+}
+
+function fillReceiver(a: Address) {
+  receiver.name = a.receiver
+  receiver.phone = a.phone
+  receiver.address = addrText(a)
+}
+
+/** 选择收货地址：选中下拉项即回填；未选则手动填写 */
+function selectAddr(id: number | null) {
+  selectedAddrId.value = id
+  if (id == null) {
+    receiver.name = ''
+    receiver.phone = ''
+    receiver.address = ''
+    return
+  }
+  const addr = addrList.value.find((a) => a.id === id)
+  if (addr) fillReceiver(addr)
+}
+
+async function openCheckout() {
   if (!isLogged.value) {
     ElMessage.info('请先登录再结算（游客购物车将在登录后自动合并）')
     router.push('/login')
@@ -129,9 +160,21 @@ function openCheckout() {
     ElMessage.warning('请先勾选商品')
     return
   }
-  receiver.name = ''
-  receiver.phone = ''
-  receiver.address = ''
+  try {
+    addrList.value = await getAddresses()
+  } catch {
+    addrList.value = []
+  }
+  // 默认选中默认地址；无地址则进入手动填写
+  const def = addrList.value.find((a) => a.isDefault === 1) ?? addrList.value[0]
+  selectedAddrId.value = def?.id ?? null
+  if (def) {
+    fillReceiver(def)
+  } else {
+    receiver.name = ''
+    receiver.phone = ''
+    receiver.address = ''
+  }
   checkoutDialog.value = true
 }
 
@@ -219,6 +262,25 @@ onMounted(load)
     <p v-else-if="!loading" class="empty">购物车空空如也 —— <router-link to="/">去货架挑点东西</router-link></p>
 
     <el-dialog v-model="checkoutDialog" title="填写收货信息（下单快照）" width="460">
+      <div class="addr-picker">
+        <p class="addr-title">选择收货地址</p>
+        <el-select
+          v-model="selectedAddrId"
+          class="addr-select"
+          placeholder="请选择收货地址"
+          clearable
+          @change="selectAddr"
+        >
+          <el-option
+            v-for="a in addrList"
+            :key="a.id"
+            :label="`${a.receiver} · ${a.phone} · ${addrText(a)}${a.isDefault === 1 ? '（默认）' : ''}`"
+            :value="a.id"
+          />
+        </el-select>
+        <p v-if="!addrList.length" class="addr-empty">暂无收货地址，请手动填写下方信息</p>
+      </div>
+
       <el-form label-width="80px">
         <el-form-item label="收货人">
           <el-input v-model="receiver.name" />
@@ -461,6 +523,24 @@ onMounted(load)
 .empty a {
   color: var(--mx-red);
 }
+/* 收货地址下拉 */
+.addr-picker {
+  margin-bottom: 14px;
+}
+.addr-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--mx-ink-2);
+}
+.addr-select {
+  width: 100%;
+}
+.addr-empty {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--mx-ink-2);
+}
+
 .pay-tip {
   font-size: 14px;
 }

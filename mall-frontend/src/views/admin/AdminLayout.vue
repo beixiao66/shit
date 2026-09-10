@@ -103,7 +103,7 @@ function logout() {
   color: #fff;
   background: rgba(255, 255, 255, 0.06);
 }
-.sider-link.router-link-active {
+.sider-link.router-link-exact-active {
   color: var(--md-color-primary);
   background: var(--md-color-accent);
   font-weight: 600;

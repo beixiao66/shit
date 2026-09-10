@@ -181,8 +181,8 @@ onBeforeUnmount(stopBanner)
         v-for="c in categories"
         :key="c.id"
         class="cat"
-        :class="{ cat_active: String(activeCategory) === String(c.id) && c.parentId === 0 }"
-        @click="pickCategory(c.parentId === 0 ? c.id : undefined)"
+        :class="{ cat_active: String(activeCategory) === String(c.id) }"
+        @click="pickCategory(c.id)"
       >
         {{ c.name }}
       </span>
@@ -210,9 +210,8 @@ onBeforeUnmount(stopBanner)
     </section>
 
     <section v-if="adverts.length" class="advert-strip">
-      <a v-for="ad in adverts" :key="ad.id" class="advert" href="#" @click.prevent="jumpAd(ad.linkUrl)">
+      <a v-for="ad in adverts" :key="ad.id" class="advert" href="#" :title="ad.title" @click.prevent="jumpAd(ad.linkUrl)">
         <img :src="ad.imgUrl" :alt="ad.title" />
-        <span class="advert-title">{{ ad.title }}</span>
       </a>
     </section>
 
@@ -455,15 +454,6 @@ onBeforeUnmount(stopBanner)
 }
 .advert:hover img {
   transform: scale(1.04);
-}
-.advert-title {
-  position: absolute;
-  left: 12px;
-  bottom: 10px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
 /* 商品网格 5 列 */

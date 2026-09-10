@@ -32,6 +32,44 @@ function defaultSku(): Sku {
   return { specJson: '', price: 0, stock: 0, status: 0, remark: '' }
 }
 
+/** 客观 specJson → 友好格式（维度:值;维度:值），便于商家阅读/编辑 */
+function friendlyFromJson(json: string): string {
+  try {
+    const obj = JSON.parse(json) as Record<string, string>
+    return Object.entries(obj).map(([k, v]) => `${k}:${v}`).join(';')
+  } catch {
+    return json
+  }
+}
+
+function isValidJson(s: string): boolean {
+  try {
+    JSON.parse(s)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 友好格式 → specJson；以 { 开头按 JSON 处理（校验合法性），否则按 维度:值;维度:值 解析 */
+function buildSpecJson(raw: string): string {
+  const s = (raw ?? '').trim()
+  if (!s) return ''
+  if (s.startsWith('{')) {
+    if (!isValidJson(s)) throw new Error('规格 JSON 格式错误')
+    return s
+  }
+  const obj: Record<string, string> = {}
+  for (const part of s.split(';')) {
+    const idx = part.indexOf(':')
+    if (idx <= 0) continue
+    const k = part.slice(0, idx).trim()
+    const v = part.slice(idx + 1).trim()
+    if (k && v) obj[k] = v
+  }
+  return Object.keys(obj).length ? JSON.stringify(obj) : ''
+}
+
 function openCreate() {
   editingId.value = undefined
   Object.assign(form, {
@@ -56,16 +94,21 @@ async function openEdit(row: Product) {
     mainImg: row.mainImg,
     detail: detail.detail ?? '',
     status: row.status,
-    skus: detail.skus.length ? detail.skus : [defaultSku()],
+    skus: detail.skus.length ? detail.skus.map((s) => ({ ...s, specJson: friendlyFromJson(s.specJson) })) : [defaultSku()],
   })
   dialog.value = true
 }
 
 async function submit() {
-  await saveProduct({ id: editingId.value, ...form })
-  ElMessage.success('已保存')
-  dialog.value = false
-  load()
+  try {
+    const skus = form.skus.map((sku) => ({ ...sku, specJson: buildSpecJson(sku.specJson) }))
+    await saveProduct({ id: editingId.value, ...form, skus })
+    ElMessage.success('已保存')
+    dialog.value = false
+    load()
+  } catch (e) {
+    ElMessage.warning((e as Error).message || '保存失败')
+  }
 }
 
 async function toggle(row: Product) {
@@ -146,8 +189,9 @@ onMounted(async () => {
         </el-form-item>
         <el-form-item label="规格 SKU">
           <div class="sku-editor">
+            <p class="sku-tip">规格格式：<b>维度:值</b>，多个用 <b>;</b> 分隔，例：<code>颜色:红;尺码:40</code></p>
             <div v-for="(sku, i) in form.skus" :key="i" class="sku-row">
-              <el-input v-model="sku.specJson" placeholder='{"颜色":"红"}' class="sku-spec" />
+              <el-input v-model="sku.specJson" placeholder="颜色:红;尺码:40" class="sku-spec" />
               <el-input-number v-model="sku.price" :precision="2" :min="0" placeholder="价格" class="sku-price" />
               <el-input-number v-model="sku.stock" :min="0" placeholder="库存" class="sku-stock" />
               <el-input v-model="sku.remark" placeholder="备注" class="sku-remark" />
@@ -187,6 +231,17 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.sku-tip {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mx-ink-2);
+}
+.sku-tip code {
+  color: var(--mx-red);
+  background: var(--mx-red-soft);
+  padding: 1px 5px;
+  border-radius: 4px;
 }
 .sku-row {
   display: flex;
