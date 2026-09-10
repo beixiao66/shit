@@ -29,7 +29,7 @@ async function loadProducts() {
   try {
     const res = await getProductList({ page: page.value, size: pageSize.value, merchantId })
     products.value = res.records
-    total.value = res.total
+    total.value = Number(res.total)
   } catch {
     ElMessage.warning('商品加载失败')
   } finally {

@@ -32,7 +32,7 @@ const form = reactive({
 async function load() {
   const res = await getMyProducts(page.value, 10)
   list.value = res.records
-  total.value = res.total
+  total.value = Number(res.total)
 }
 
 /** 类目 → 关联规格名（选择类目后，规格名仅显示该类目相关的项） */

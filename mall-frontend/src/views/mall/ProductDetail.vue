@@ -44,6 +44,33 @@ function specOf(sku: Sku): Record<string, string> {
   }
 }
 
+/** 是否已选齐所有规格维度 */
+const specComplete = computed(
+  () => specGroups.value.length > 0 && specGroups.value.every(([k]) => !!selectedSpec.value[k]),
+)
+
+/** 按键值精确匹配 SKU（未匹配到返回 null） */
+function matchSku(spec: Record<string, string>): Sku | null {
+  const skus = product.value?.skus ?? []
+  return (
+    skus.find((s) => {
+      const sp = specOf(s)
+      return Object.entries(spec).every(([k, v]) => sp[k] === v)
+    }) ?? null
+  )
+}
+
+/** 库存友好文案（当前所选组合对应的库存） */
+const stockText = computed(() => {
+  if (!specComplete.value) return '请选择完整规格'
+  const sku = currentSku.value
+  if (!sku) return '该规格组合暂无货'
+  const s = sku.stock ?? 0
+  if (s <= 0) return '缺货'
+  if (s <= 10) return `仅剩 ${s} 件`
+  return `库存充足（${s} 件）`
+})
+
 async function load() {
   try {
     product.value = await getProductDetail(route.params.id as string)
@@ -56,24 +83,10 @@ async function load() {
   }
 }
 
-/** 点击规格值：先按键值精确匹配 SKU；若该组合不存在（SKU 未全排列），
- *  则降级为"包含该规格值的任意 SKU"，联动其余维度，避免出现不可选的死锁组合 */
+/** 选择规格值：各维度独立选择、自由组合；实时匹配对应 SKU 与库存 */
 function selectSpec(key: string, value: string) {
-  const chosen = { ...selectedSpec.value, [key]: value }
-  const skus = product.value?.skus ?? []
-  let match = skus.find((s) => {
-    const spec = specOf(s)
-    return Object.entries(chosen).every(([k, v]) => spec[k] === v)
-  })
-  if (!match) {
-    match = skus.find((s) => specOf(s)[key] === value)
-  }
-  if (match) {
-    selectedSpec.value = specOf(match)
-    selectedSku.value = match
-  } else {
-    ElMessage.warning('该规格组合不可选，请更换搭配')
-  }
+  selectedSpec.value = { ...selectedSpec.value, [key]: value }
+  selectedSku.value = matchSku(selectedSpec.value)
 }
 
 /** 游客车 key 与 CartPage 共用 */
@@ -91,7 +104,7 @@ function readGuestCart(): Array<Record<string, unknown>> {
 async function addCart() {
   const sku = currentSku.value
   if (!sku || !sku.id || !product.value) {
-    ElMessage.warning('请先选择规格')
+    ElMessage.warning('请选择有货的规格组合')
     return
   }
   if (!userStore.token) {
@@ -158,7 +171,7 @@ function selectBuyAddr(id: number | null) {
 async function buyNow() {
   const sku = currentSku.value
   if (!sku || !sku.id || !product.value) {
-    ElMessage.warning('请先选择规格')
+    ElMessage.warning('请选择有货的规格组合')
     return
   }
   if (!userStore.token) {
@@ -223,10 +236,8 @@ onMounted(load)
           <span class="price-sale md-num">已售 {{ product.saleCount ?? 0 }}</span>
         </div>
         <div class="price-meta">
-          <span class="meta-stock">库存
-            <span class="md-num meta-val">{{ currentSku?.stock ?? '—' }}</span>
-            <span v-if="currentSku" class="stock-remark">{{ currentSku.remark }}</span>
-          </span>
+          <span class="meta-stock" :class="{ 'meta-oos': specComplete && !currentSku }">{{ stockText }}</span>
+          <span v-if="currentSku?.remark" class="stock-remark">{{ currentSku.remark }}</span>
         </div>
       </div>
 
@@ -366,10 +377,8 @@ onMounted(load)
   font-size: 13px;
   color: var(--mx-ink-2);
 }
-.meta-val {
-  color: var(--mx-ink);
-  font-weight: 600;
-  margin-left: 4px;
+.meta-oos {
+  color: var(--mx-red);
 }
 .stock-remark {
   margin-left: 10px;

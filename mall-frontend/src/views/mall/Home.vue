@@ -103,7 +103,7 @@ async function loadProducts() {
       keyword: keyword.value || undefined,
     })
     products.value = page.records
-    total.value = page.total
+    total.value = Number(page.total)
   } catch {
     ElMessage.warning('商品接口暂不可用（服务未启动或未联调）')
   } finally {
