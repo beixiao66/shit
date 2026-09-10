@@ -14,6 +14,7 @@ import com.mall.product.mapper.ProductMapper;
 import com.mall.product.mapper.SkuMapper;
 import com.mall.product.vo.ProductDetailVO;
 import com.mall.product.vo.ProductVO;
+import com.mall.product.vo.ShopVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class ProductService {
                 new Page<>(q.getPage(), q.getSize()),
                 new LambdaQueryWrapper<Product>()
                         .eq(q.getCategoryId() != null, Product::getCategoryId, q.getCategoryId())
+                        .eq(q.getMerchantId() != null, Product::getMerchantId, q.getMerchantId())
                         .eq(Product::getStatus, 0)
                         .and(q.getKeyword() != null && !q.getKeyword().isBlank(),
                                 w -> w.like(Product::getTitle, q.getKeyword()))
@@ -207,5 +209,22 @@ public class ProductService {
             name = merchant == null ? "" : merchant.getMerchantName();
         }
         return name == null ? "" : name;
+    }
+
+    /** 店铺信息（前台店铺页头部） */
+    public ShopVO shop(Long merchantId) {
+        MerchantShop m = merchantShopMapper.selectShopById(merchantId);
+        if (m == null) {
+            throw new BizException("店铺不存在");
+        }
+        ShopVO vo = new ShopVO();
+        vo.setMerchantId(m.getId());
+        String name = (m.getShopName() != null && !m.getShopName().isBlank()) ? m.getShopName() : m.getMerchantName();
+        vo.setShopName(name == null ? "" : name);
+        vo.setShopLogo(m.getShopLogo());
+        vo.setShopDesc(m.getShopDesc());
+        vo.setShopAddress(m.getShopAddress());
+        vo.setShopStatus(m.getShopStatus());
+        return vo;
     }
 }

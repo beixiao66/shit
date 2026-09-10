@@ -49,6 +49,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/api/portal/categories",
             "/api/portal/adverts",
             "/api/portal/products",
+            "/api/portal/shops",
             "/api/pay/mock/callback"
     };
 

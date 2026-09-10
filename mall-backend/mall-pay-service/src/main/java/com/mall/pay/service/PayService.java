@@ -122,6 +122,8 @@ public class PayService {
                 if (merchantId != null) {
                     orderPayMapper.addMerchantBalance(merchantId, pay.getAmount());
                 }
+                // 支付成功累加商品销量/已售（仅首次状态流转成功才执行，天然幂等）
+                changeSaleCount(pay.getOrderNo(), true);
             }
         } finally {
             if (locked) {
@@ -180,6 +182,8 @@ public class PayService {
                 if (merchantId != null) {
                     orderPayMapper.deductMerchantBalance(merchantId, refund.getAmount());
                 }
+                // 退款成功扣减商品销量/已售（仅首次状态流转成功才执行，天然幂等）
+                changeSaleCount(orderNo, false);
             }
         } else {
             refundMapper.markFailed(refund.getId());
@@ -212,5 +216,19 @@ public class PayService {
     private String genNo(String prefix) {
         return prefix + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"))
                 + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+    }
+
+    /** 按订单明细调整商品销量/已售：increase=true 支付成功累加，false 退款成功扣减 */
+    private void changeSaleCount(String orderNo, boolean increase) {
+        for (OrderPayMapper.OrderItemSale it : orderPayMapper.selectItems(orderNo)) {
+            if (it.getProductId() == null || it.getCount() == null) {
+                continue;
+            }
+            if (increase) {
+                orderPayMapper.addSaleCount(it.getProductId(), it.getCount());
+            } else {
+                orderPayMapper.deductSaleCount(it.getProductId(), it.getCount());
+            }
+        }
     }
 }

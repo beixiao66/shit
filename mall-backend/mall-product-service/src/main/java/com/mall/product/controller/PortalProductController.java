@@ -10,6 +10,7 @@ import com.mall.product.service.CategoryService;
 import com.mall.product.service.ProductService;
 import com.mall.product.vo.ProductDetailVO;
 import com.mall.product.vo.ProductVO;
+import com.mall.product.vo.ShopVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,5 +47,10 @@ public class PortalProductController {
     @GetMapping("/products/{id}")
     public Result<ProductDetailVO> detail(@PathVariable Long id) {
         return Result.ok(productService.detail(id));
+    }
+
+    @GetMapping("/shops/{merchantId}")
+    public Result<ShopVO> shop(@PathVariable Long merchantId) {
+        return Result.ok(productService.shop(merchantId));
     }
 }

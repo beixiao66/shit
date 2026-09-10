@@ -232,8 +232,9 @@ onBeforeUnmount(stopBanner)
       <p v-if="!loading && !products.length" class="empty">空货架 —— 商家上架后自动出现</p>
     </section>
 
-    <div v-if="total > PAGE_SIZE" class="pager">
+    <div v-if="total" class="pager">
       <el-pagination
+        background
         layout="prev, pager, next, total"
         :total="total"
         :page-size="PAGE_SIZE"

@@ -250,7 +250,7 @@ onMounted(load)
         <el-button size="large" class="btn-buy" @click="buyNow">立即购买</el-button>
       </div>
 
-      <router-link class="shop-card" :to="`/product/${product.id}`" @click.prevent>
+      <router-link class="shop-card" :to="`/shop/${product.merchantId}`">
         <span class="shop-avatar">MX</span>
         <span class="shop-info">
           <span class="shop-name">{{ product.shopName }}</span>

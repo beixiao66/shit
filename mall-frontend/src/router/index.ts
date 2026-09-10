@@ -14,6 +14,7 @@ const router = createRouter({
       children: [
         { path: '', name: 'home', component: () => import('@/views/mall/Home.vue') },
         { path: 'product/:id', name: 'product-detail', component: () => import('@/views/mall/ProductDetail.vue') },
+        { path: 'shop/:merchantId', name: 'shop', component: () => import('@/views/mall/ShopPage.vue') },
         { path: 'cart', name: 'cart', component: () => import('@/views/mall/CartPage.vue') },
         { path: 'orders', name: 'orders', component: () => import('@/views/mall/OrdersPage.vue') },
         { path: 'profile', name: 'profile', component: () => import('@/views/mall/ProfilePage.vue') },

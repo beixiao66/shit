@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 直连同库 order 表（支付链路状态同步，单库演示约定）：
@@ -44,9 +45,27 @@ public interface OrderPayMapper {
     @Update("UPDATE merchant SET balance = balance - #{amount} WHERE id = #{merchantId} AND balance >= #{amount}")
     int deductMerchantBalance(@Param("merchantId") Long merchantId, @Param("amount") BigDecimal amount);
 
+    /** 订单明细（销量按商品累加/扣减需要 product_id + count） */
+    @Select("SELECT product_id, `count` FROM order_item WHERE order_no = #{orderNo}")
+    List<OrderItemSale> selectItems(@Param("orderNo") String orderNo);
+
+    /** 支付成功累加商品销量（同库直写 product.sale_count，单库演示约定） */
+    @Update("UPDATE product SET sale_count = sale_count + #{count} WHERE id = #{productId}")
+    int addSaleCount(@Param("productId") Long productId, @Param("count") int count);
+
+    /** 退款成功扣减商品销量（不小于 0） */
+    @Update("UPDATE product SET sale_count = GREATEST(sale_count - #{count}, 0) WHERE id = #{productId}")
+    int deductSaleCount(@Param("productId") Long productId, @Param("count") int count);
+
     @lombok.Data
     class OrderPayView {
         private Integer status;
         private BigDecimal payAmount;
+    }
+
+    @lombok.Data
+    class OrderItemSale {
+        private Long productId;
+        private Integer count;
     }
 }

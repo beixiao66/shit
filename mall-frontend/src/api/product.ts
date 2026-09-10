@@ -50,14 +50,27 @@ interface Page<T> {
 export interface ProductQuery {
   page?: number
   size?: number
-  categoryId?: number
+  categoryId?: number | string
+  merchantId?: number | string
   keyword?: string
+}
+
+/** 店铺信息（前台店铺页头部） */
+export interface ShopInfo {
+  merchantId: number | string
+  shopName: string
+  shopLogo?: string
+  shopDesc?: string
+  shopAddress?: string
+  shopStatus?: number
 }
 
 // 前台
 export const getProductList = (query: ProductQuery = {}) =>
   http.get<never, Page<Product>>('/portal/products', { params: query })
 export const getProductDetail = (id: number | string) => http.get<never, ProductDetail>(`/portal/products/${id}`)
+export const getShopInfo = (merchantId: number | string) =>
+  http.get<never, ShopInfo>(`/portal/shops/${merchantId}`)
 
 // 商家管理（商品管理页面）
 export const getMyProducts = (page = 1, size = 10) =>
