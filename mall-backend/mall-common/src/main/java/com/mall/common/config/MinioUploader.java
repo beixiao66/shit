@@ -5,6 +5,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.SetBucketPolicyArgs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -61,7 +62,8 @@ public class MinioUploader {
     }
 
     /**
-     * 桶存在判断 + 不存在则自动创建（幂等，重复调用安全）。
+     * 桶存在判断 + 不存在则自动创建（幂等，重复调用安全）；
+     * 并确保桶为公开只读，否则返回的图片 URL 匿名访问会 403。
      */
     public void ensureBucket(String bucket) {
         if (KNOWN_BUCKETS.contains(bucket)) {
@@ -73,11 +75,24 @@ public class MinioUploader {
                 minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
                 log.info("[MinIO] 桶不存在，已自动创建: {}", bucket);
             }
+            // 幂等：无论桶是否新建，都确保公开只读策略（图片需可匿名 GET）
+            minioClient.setBucketPolicy(SetBucketPolicyArgs.builder()
+                    .bucket(bucket)
+                    .config(publicReadPolicy(bucket))
+                    .build());
             KNOWN_BUCKETS.add(bucket);
         } catch (Exception e) {
-            log.error("[MinIO] 桶检查/创建失败 bucket={}", bucket, e);
+            log.error("[MinIO] 桶检查/创建/策略设置失败 bucket={}", bucket, e);
             throw new BizException("对象存储暂不可用，请稍后重试");
         }
+    }
+
+    /** 公开只读策略：允许匿名 GetObject（图片直接可访问） */
+    private String publicReadPolicy(String bucket) {
+        return "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\","
+                + "\"Principal\":{\"AWS\":[\"*\"]},"
+                + "\"Action\":[\"s3:GetObject\"],"
+                + "\"Resource\":[\"arn:aws:s3:::" + bucket + "/*\"]}]}";
     }
 
     /** 拼公开 URL：默认 endpoint 同源，可用 public-url 覆盖 */

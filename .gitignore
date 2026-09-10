@@ -14,3 +14,7 @@ Thumbs.db
 # Maven
 target/
 logs/*.log
+
+application.yaml
+application.yml
+
