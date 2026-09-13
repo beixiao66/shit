@@ -80,8 +80,8 @@
 | # | 任务 | 状态 | 完成日期 | 说明 |
 |---|---|---|---|---|
 | 9.1 | 全模块接口联调（**此时才启用测试**） | ▶ | 2026-09-06 | **全链路冒烟已通过：scripts/smoke.py 23/23 PASS**（登录3身份/游客浏览/加购合并/拆单下单/库存预扣/支付回调幂等(金额拒收预期)/发货/确认收货/退款/提现驳回回补/双端看板）。运行修复：jar repackage 绑定、-parameters 编译参数、JDBC characterEncoding=UTF-8、网关 portal/adverts 路由与回调白名单、管理员登录 type=1、库存 Redis 预热、MQ 失败降级。待环境项：**RocketMQ broker 上报地址**（docker 内网 IP 导致延迟消息发送失败——下单已降级不阻断，超时取消需在 192.168.193.131 确认 broker.conf 挂载生效后重启 broker 复测）；JUnit/压测用例待联调完成后补 |
-| 9.2 | Docker 镜像打包 + 部署文档 | ✅ | 2026-09-06 | docker/docker-compose.yml（nacos2.3/redis7.2/rocketmq5.1.4+dashboard/sentinel-dashboard）、broker.conf（brokerIP1 宿主）、通用 Dockerfile（JDK17）；docs/deploy.md：compose 启动→建库→打包镜像→启动顺序→演示参数（延迟等级 3=10s 演示） |
-| 9.3 | 全套项目文档（需求/数据库/概要/接口/日报） | ✅ | 2026-09-06 | docs/requirements.md（角色/功能/非功能/验收）、architecture.md（拓扑/服务边界/三大时序/鉴权）、api.md（全端点清单）、daily-report.md（日报模板）、database-design.md（已有）+ CLAUDE.md 总纲 |
+| 9.2 | Docker 镜像打包 + 部署 | ✅ | 2026-09-06 | docker/docker-compose.yml（nacos2.3/redis7.2/rocketmq5.1.4+dashboard/sentinel-dashboard）、broker.conf（brokerIP1 宿主）、通用 Dockerfile（JDK17）；部署步骤与演示参数（延迟等级 3=10s）见根 README.md |
+| 9.3 | 全套项目文档（需求/数据库/概要/实施） | ✅ | 2026-09-06 | docs/requirements.md（角色/功能/非功能/验收）、architecture.md（拓扑/服务边界/三大时序/鉴权）、database-design.md（13 表设计）、implementation.md（本文件）、init.sql（建表+种子）；根目录 README.md（环境上手）+ CLAUDE.md 总纲 |
 
 ## 环境参数（写死在各服务 application.yml）
 
@@ -92,3 +92,15 @@
 | RocketMQ | `192.168.193.131:9876` |
 | MySQL | `localhost:3306/mall_x`（库名 mall_x，脚本见 docs/init.sql） |
 | 支付宝沙箱 | 待配置（密钥留白，处理支付时填写）|
+
+## 迭代记录（大纲里程碑之外的持续改进）
+
+### 2026-09-13：前台体验、搜索与数据扩充
+
+| 类别 | 内容 |
+|---|---|
+| 前台体验 | 分页文案中文化（Element Plus 中文语言包）+ 每页条数选择器；我的订单支持订单号/收货人/商品名搜索与下单时间正倒序、明细显示商品主图；购物车/订单/商品详情统一「返回首页」入口；首页改版（去广告条、服务保障条、热销推荐、页脚、回到顶部，内容区 1200→1440）；商品详情新增顶部导航与「猜你喜欢」同类推荐；商家店铺设置移除收款码 |
+| 搜索 | 商品搜索同时匹配店铺名；新增「相关店铺」卡片，搜索命中店铺可直接进店（`GET /api/portal/shops`）；商家端店铺订单与平台订单管理同样支持搜索 |
+| 数据 | 种子数据扩充为 10 商家 / 113 商品 / 270 SKU（产品图 28 张；生成脚本见 scripts/gen_images.py、gen_seed.py） |
+| 缺陷修复 | ① 数据看板「近 7 日营收趋势」从未渲染（v-if 容器挂载前即 init ECharts，`$chart` 为 null）→ 已修，并补零为连续 7 个自然日、口径由 7×24 小时对齐为自然日；② merchant/user/pay 三服务缺 MyBatis-Plus 分页插件，`selectPage` 不生效且 total 恒为 0 → 已补齐 |
+| 清理 | 移除收款码全链路（前端/接口/实体/数据库列）与广告跳转链接；废弃列 `advert.link_url`、`merchant.pay_code_url` 已 DROP |

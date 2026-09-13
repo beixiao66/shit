@@ -1,6 +1,7 @@
 # Mall-X 数据库设计文档（13 表精缩版）
 
-> 依据《行业工程实践》教学大纲任务 3 编写。建表脚本：[docs/init.sql](init.sql)（DDL + 种子数据，可直接 mysql 执行）。
+> 依据《行业工程实践》教学大纲任务 3 编写。建表脚本：[docs/init.sql](init.sql)（DDL + 种子数据：10 商家 / 113 商品 / 270 SKU / 5 类目）。
+> 导入务必带 `--default-character-set=utf8mb4`，否则中文种子数据报 Data too long：`mysql -uroot -p --default-character-set=utf8mb4 < docs/init.sql`。
 > 修订记录：v2 从 22 表裁剪至 13 表（最小可完成业务）；公共字段抽 BaseDO（§1）；无平台佣金；分库分表仅设计文档。
 > 约定：MySQL 8，utf8mb4；金额 DECIMAL(12,2)；时间 DATETIME；状态 TINYINT。
 

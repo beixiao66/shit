@@ -81,5 +81,5 @@ POST /api/order/create
 
 - 每服务自带 GET /ping 健康检查
 - Nacos 控制台查看服务实例与下线；RocketMQ Dashboard（8180）观察延迟消息
-- 部署步骤：docs/deploy.md（compose 一键中间件 + 逐服务镜像 + 启动顺序）
+- 部署：`docker/docker-compose.yml` 一键起中间件；各服务 `mvn package` 后 `java -jar` 启动（端口与顺序见根 `README.md`）
 - Sentinel：网关内嵌限流 + 服务侧 @SentinelResource 静态规则；Dashboard（8858）可选接入热更新

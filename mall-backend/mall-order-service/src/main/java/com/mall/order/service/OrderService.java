@@ -178,7 +178,7 @@ public class OrderService {
 
         // 5. 超时取消延迟消息（消费端做状态校验，重复消费幂等）
         // 健壮性：broker 不可用时仅停用"超时自动取消"，不阻断下单主链路（手动取消仍可用；
-        // broker 侧修复见 docs/deploy.md §7 备注：确认 broker.conf 挂载生效、brokerIP1 配宿主地址）
+        // broker 侧修复：确认 docker/broker.conf 挂载生效、brokerIP1 配宿主地址）
         for (String orderNo : orderNos) {
             org.springframework.messaging.Message<String> msg =
                     org.springframework.messaging.support.MessageBuilder.withPayload(orderNo).build();
