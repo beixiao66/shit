@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getProductDetail, type Sku } from '@/api/product'
+import { getProductDetail, getProductList, type Product, type Sku } from '@/api/product'
 import { addToCart } from '@/api/cart'
 import { createOrder } from '@/api/order'
 import { getAddresses, type Address } from '@/api/user'
@@ -12,6 +12,8 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const product = ref<Awaited<ReturnType<typeof getProductDetail>> | null>(null)
+/** 猜你喜欢：同类目商品（排除当前商品） */
+const likedProducts = ref<Product[]>([])
 const selectedSku = ref<Sku | null>(null)
 /** 当前已选规格键值对（规格选择器精确匹配用） */
 const selectedSpec = ref<Record<string, string>>({})
@@ -77,9 +79,26 @@ async function load() {
     const firstSku = product.value.skus.length ? product.value.skus[0] : null
     selectedSku.value = firstSku
     if (firstSku) selectedSpec.value = specOf(firstSku)
+    loadLiked()
   } catch {
     ElMessage.warning('商品不存在或已下架')
     router.replace('/')
+  }
+}
+
+/** 猜你喜欢：同类目商品（多取 1 个用于排除当前商品），失败静默 */
+async function loadLiked() {
+  try {
+    const page = await getProductList({
+      page: 1,
+      size: 7,
+      categoryId: product.value?.categoryId,
+    })
+    likedProducts.value = page.records
+      .filter((p) => String(p.id) !== String(route.params.id))
+      .slice(0, 6)
+  } catch {
+    likedProducts.value = []
   }
 }
 
@@ -222,6 +241,16 @@ onMounted(load)
 
 <template>
   <div v-if="product" class="detail">
+    <header class="head">
+      <router-link class="brand" to="/">
+        <span class="brand-logo">MX</span>
+        <span class="brand-sub">商品详情</span>
+      </router-link>
+      <router-link class="nav-link" to="/">← 返回首页</router-link>
+      <router-link class="nav-link" to="/orders">我的订单</router-link>
+      <router-link class="nav-link" to="/cart">购物车</router-link>
+    </header>
+
     <div class="gallery">
       <img :src="product.mainImg" :alt="product.title" />
     </div>
@@ -270,8 +299,28 @@ onMounted(load)
         <span class="shop-enter">进店看更多 ›</span>
       </router-link>
 
-      <router-link class="back" to="/">← 回到货架</router-link>
+      <router-link class="back" to="/">← 返回首页</router-link>
     </div>
+
+    <section v-if="likedProducts.length" class="like">
+      <div class="section-head">
+        <h2 class="section-title">猜你喜欢</h2>
+        <span class="section-sub">同类商品推荐</span>
+      </div>
+      <div class="like-grid">
+        <router-link v-for="p in likedProducts" :key="`like-${p.id}`" class="card" :to="`/product/${p.id}`">
+          <div class="card-img"><img :src="p.mainImg" :alt="p.title" /></div>
+          <div class="card-body">
+            <p class="card-title">{{ p.title }}</p>
+            <p class="card-seller"><span class="seller-mark">MX</span> {{ p.shopName }}</p>
+            <div class="card-foot">
+              <span class="price">¥ <b class="md-num">{{ p.minPrice?.toFixed(2) }}</b></span>
+              <span class="sale md-num">已售 {{ p.saleCount ?? 0 }}</span>
+            </div>
+          </div>
+        </router-link>
+      </div>
+    </section>
 
     <el-dialog v-model="buyDialog" title="确认收货信息（立即购买）" width="460">
       <div class="addr-picker">
@@ -320,6 +369,149 @@ onMounted(load)
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 44px;
+}
+
+/* 顶部导航（grid 跨两列） */
+.head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--mx-line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--mx-red);
+  color: #fff;
+  font-weight: 800;
+  font-size: 17px;
+}
+.brand-sub {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.nav-link {
+  font-size: 14px;
+  color: var(--mx-ink-2);
+}
+.nav-link:hover {
+  color: var(--mx-red);
+}
+
+/* 猜你喜欢（grid 跨两列） */
+.like {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+.section-title {
+  margin: 0;
+  font-family: var(--md-font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--mx-ink);
+}
+.section-sub {
+  font-size: 12px;
+  color: var(--mx-ink-2);
+}
+.like-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 16px;
+}
+.card {
+  border: 1px solid var(--mx-line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  transition: box-shadow 0.16s ease, transform 0.16s ease;
+}
+.card:hover {
+  box-shadow: 0 6px 22px rgba(29, 33, 41, 0.1);
+  transform: translateY(-2px);
+}
+.card-img {
+  aspect-ratio: 4 / 3;
+  background: var(--mx-bg-2);
+}
+.card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.card-body {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.card-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mx-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 40px;
+}
+.card-seller {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mx-ink-2);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.seller-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--mx-red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+.card-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.price {
+  color: var(--mx-red);
+  font-size: 13px;
+  font-weight: 600;
+}
+.price b {
+  font-size: 20px;
+  font-weight: 700;
+}
+.sale {
+  font-size: 12px;
+  color: var(--mx-ink-2);
 }
 .gallery img {
   width: 100%;
