@@ -82,7 +82,7 @@
 |---|---|---|---|---|
 | 9.1 | 全模块接口联调（**此时才启用测试**） | ▶ | 2026-09-06 | **全链路冒烟已通过：scripts/smoke.py 23/23 PASS**（登录3身份/游客浏览/加购合并/拆单下单/库存预扣/支付回调幂等(金额拒收预期)/发货/确认收货/退款/提现驳回回补/双端看板）。运行修复：jar repackage 绑定、-parameters 编译参数、JDBC characterEncoding=UTF-8、网关 portal/adverts 路由与回调白名单、管理员登录 type=1、库存 Redis 预热、MQ 失败降级。待环境项：**RocketMQ broker 上报地址**（docker 内网 IP 导致延迟消息发送失败——下单已降级不阻断，超时取消需在 192.168.193.131 确认 broker.conf 挂载生效后重启 broker 复测）；JUnit/压测用例待联调完成后补 |
 | 9.2 | Docker 镜像打包 + 部署 | ✅ | 2026-09-06 | docker/docker-compose.yml（nacos2.3/redis7.2/rocketmq5.1.4+dashboard/sentinel-dashboard）、broker.conf（brokerIP1 宿主）、通用 Dockerfile（JDK17）；部署步骤与演示参数（延迟等级 3=10s）见根 README.md |
-| 9.3 | 全套项目文档（需求/数据库/概要/实施） | ✅ | 2026-09-06 | docs/requirements.md（角色/功能/非功能/验收）、architecture.md（拓扑/服务边界/三大时序/鉴权）、database-design.md（13 表设计）、implementation.md（本文件）、init.sql（建表+种子）；根目录 README.md（环境上手）+ CLAUDE.md 总纲 |
+| 9.3 | 全套项目文档（需求/数据库/概要/实施） | ✅ | 2026-09-06 | docs/需求文档/requirements.md（角色/功能/非功能/验收）、docs/架构图/architecture.md（拓扑/服务边界/三大时序/鉴权）、docs/数据库设计/database-design.md（13 表设计）、docs/初始模块建立草图/implementation.md（本文件）、docs/init.sql（建表+种子）；根目录 README.md（环境上手）+ CLAUDE.md 总纲 |
 
 ## 环境参数（写死在各服务 application.yml）
 

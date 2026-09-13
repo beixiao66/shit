@@ -73,7 +73,7 @@ onMounted(load)
       <template v-else>
         <p class="md-num payno">支付单号 {{ payNo }}</p>
         <p class="md-num orderno">订单 {{ orderNo }}</p>
-        <p class="hint">当前为演示渠道（Mock）：点击下方按钮模拟支付宝沙箱回调（真实沙箱接入见 docs/implementation.md 环境参数）。</p>
+        <p class="hint">当前为演示渠道（Mock）：点击下方按钮模拟支付宝沙箱回调（真实沙箱接入见项目文档的环境参数说明）。</p>
         <div class="actions">
           <el-button type="primary" size="large" :disabled="paid" @click="mockCallback(true)">模拟支付成功</el-button>
           <el-button size="large" :disabled="failed" @click="mockCallback(false)">模拟支付失败</el-button>
