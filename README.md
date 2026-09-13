@@ -24,11 +24,12 @@
 
 ## 3. SQL 脚本在哪
 
-`docs/init.sql`：建 13 张表 + 种子数据（商品/ SKU / 广告 / 商家 / 用户）。
+`docs/init.sql`：建 13 张表 + 种子数据（**10 商家 / 113 商品 / 270 SKU / 5 类目 / 4 广告位**）。
 
 ```bash
 mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mall_x DEFAULT CHARACTER SET utf8mb4;"
-mysql -uroot -proot mall_x < docs/init.sql
+# 必须带 --default-character-set=utf8mb4，否则中文种子数据会报 Data too long
+mysql -uroot -proot --default-character-set=utf8mb4 mall_x < docs/init.sql
 ```
 
-演示账号：admin / user1 / seller1 / seller2 / newseller，密码均 123456。
+演示账号：admin（平台管理员）/ user1（普通用户）/ seller1 ~ seller10（商家），密码均 123456。
