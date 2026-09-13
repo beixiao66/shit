@@ -8,7 +8,7 @@ import lombok.EqualsAndHashCode;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/** 商家（账号+入驻审核+店铺+收款码合并，物理保留）。写路径在本服务（认证字段 auth 侧只读校验）。 */
+/** 商家（账号+入驻审核+店铺合并，物理保留）。写路径在本服务（认证字段 auth 侧只读校验）。 */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("merchant")
@@ -41,8 +41,6 @@ public class Merchant extends BaseDO {
 
     /** 0 营业 1 停业 */
     private Integer shopStatus;
-
-    private String payCodeUrl;
 
     /** 0 正常 1 禁用 */
     private Integer status;

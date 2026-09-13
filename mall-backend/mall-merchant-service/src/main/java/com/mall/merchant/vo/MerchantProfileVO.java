@@ -26,8 +26,6 @@ public class MerchantProfileVO {
 
     private Integer shopStatus;
 
-    private String payCodeUrl;
-
     private BigDecimal balance;
 
     private Integer applyStatus;

@@ -29,7 +29,6 @@ public class MerchantService {
         vo.setShopDesc(m.getShopDesc());
         vo.setShopAddress(m.getShopAddress());
         vo.setShopStatus(m.getShopStatus());
-        vo.setPayCodeUrl(m.getPayCodeUrl());
         vo.setBalance(m.getBalance());
         vo.setApplyStatus(m.getApplyStatus());
         vo.setStatus(m.getStatus());
@@ -43,7 +42,6 @@ public class MerchantService {
         if (patch.getShopDesc() != null) m.setShopDesc(patch.getShopDesc());
         if (patch.getShopAddress() != null) m.setShopAddress(patch.getShopAddress());
         if (patch.getShopStatus() != null) m.setShopStatus(patch.getShopStatus());
-        if (patch.getPayCodeUrl() != null) m.setPayCodeUrl(patch.getPayCodeUrl());
         merchantMapper.updateById(m);
     }
 
@@ -92,6 +90,5 @@ public class MerchantService {
         private String shopDesc;
         private String shopAddress;
         private Integer shopStatus;
-        private String payCodeUrl;
     }
 }

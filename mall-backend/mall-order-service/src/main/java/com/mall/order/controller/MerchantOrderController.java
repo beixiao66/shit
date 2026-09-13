@@ -18,12 +18,14 @@ public class MerchantOrderController {
 
     private final OrderService orderService;
 
+    /** keyword 支持订单号/收货人/商品名模糊搜索 */
     @GetMapping
     public Result<Page<OrderVO>> list(@RequestHeader(MallConstants.HEADER_USER_ID) Long merchantId,
                                       @RequestParam(required = false) Integer status,
+                                      @RequestParam(required = false) String keyword,
                                       @RequestParam(defaultValue = "1") int page,
                                       @RequestParam(defaultValue = "10") int size) {
-        return Result.ok(orderService.pageByMerchant(merchantId, status, page, size));
+        return Result.ok(orderService.pageByMerchant(merchantId, status, keyword, page, size));
     }
 
     @PutMapping("/{orderNo}/ship")

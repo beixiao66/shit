@@ -78,14 +78,22 @@ export const getMyOrders = (query: MyOrderQuery = {}) =>
 export const cancelOrder = (orderNo: string) => http.put(`/order/${orderNo}/cancel`)
 export const receiveOrder = (orderNo: string) => http.put(`/order/${orderNo}/receive`)
 
+/** 商家/平台订单查询：status 状态筛选、keyword 订单号/收货人/商品名搜索 */
+export interface AdminOrderQuery {
+  status?: number
+  keyword?: string
+  page?: number
+  size?: number
+}
+
 // 商家侧
-export const getMerchantOrders = (status?: number, page = 1, size = 10) =>
-  http.get<never, Page<OrderVO>>('/merchant/orders', { params: { status, page, size } })
+export const getMerchantOrders = (query: AdminOrderQuery = {}) =>
+  http.get<never, Page<OrderVO>>('/merchant/orders', { params: query })
 export const shipOrder = (orderNo: string, logisticsCompany: string, trackingNo: string) =>
   http.put(`/merchant/orders/${orderNo}/ship`, { logisticsCompany, trackingNo })
 
 // 管理员侧
-export const getAdminOrders = (status?: number, page = 1, size = 10) =>
-  http.get<never, Page<OrderVO>>('/admin/orders', { params: { status, page, size } })
+export const getAdminOrders = (query: AdminOrderQuery = {}) =>
+  http.get<never, Page<OrderVO>>('/admin/orders', { params: query })
 export const adminShipOrder = (orderNo: string, logisticsCompany: string, trackingNo: string) =>
   http.put(`/admin/orders/${orderNo}/ship`, { logisticsCompany, trackingNo })

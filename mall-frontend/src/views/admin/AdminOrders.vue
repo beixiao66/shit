@@ -29,16 +29,28 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const status = ref<number | undefined>(undefined)
+/** 搜索关键字：订单号 / 收货人 / 商品名 */
+const keyword = ref('')
 const shipDialog = ref(false)
 const shipOrderNo = ref('')
 const ship = reactive({ logisticsCompany: '', trackingNo: '' })
 
 async function load() {
-  const res = isMerchant()
-    ? await getMerchantOrders(status.value, page.value, pageSize.value)
-    : await getAdminOrders(status.value, page.value, pageSize.value)
+  const query = {
+    status: status.value,
+    keyword: keyword.value.trim() || undefined,
+    page: page.value,
+    size: pageSize.value,
+  }
+  const res = isMerchant() ? await getMerchantOrders(query) : await getAdminOrders(query)
   list.value = res.records
   total.value = res.total
+}
+
+/** 搜索：回到第 1 页重查 */
+function onSearch() {
+  page.value = 1
+  load()
 }
 
 /** 切换每页条数：回到第 1 页重查 */
@@ -77,9 +89,19 @@ onMounted(load)
   <div>
     <div class="head">
       <h1 class="title">{{ isMerchant() ? '店铺订单' : '订单管理' }}</h1>
-      <el-select v-model="status" style="width: 140px" @change="page = 1; load()">
-        <el-option v-for="s in STATUS_OPTIONS" :key="s.label" :label="s.label" :value="s.value ?? 'all'" />
-      </el-select>
+      <div class="filters">
+        <el-input
+          v-model="keyword"
+          class="search"
+          placeholder="搜索订单号 / 收货人 / 商品名"
+          clearable
+          @keyup.enter="onSearch"
+          @clear="onSearch"
+        />
+        <el-select v-model="status" style="width: 140px" @change="page = 1; load()">
+          <el-option v-for="s in STATUS_OPTIONS" :key="s.label" :label="s.label" :value="s.value ?? 'all'" />
+        </el-select>
+      </div>
     </div>
 
     <el-table :data="list" border>
@@ -153,6 +175,14 @@ onMounted(load)
   font-family: var(--md-font-display);
   font-size: 22px;
   font-weight: 700;
+}
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.search {
+  width: 260px;
 }
 .muted {
   color: var(--md-color-ink-sub);

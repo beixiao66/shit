@@ -264,42 +264,50 @@ public class OrderService {
     // -----------------------------------------------------
 
     /**
-     * 我的订单：status 状态筛选；keyword 匹配订单号或商品名（明细快照 title）；
+     * 我的订单：status 状态筛选；keyword 匹配订单号 / 收货人 / 商品名；
      * sort=asc 按下单时间正序，其余（默认）倒序。
      */
     public Page<OrderVO> pageByUser(Long userId, Integer status, String keyword, String sort, int page, int size) {
         LambdaQueryWrapper<OrderDO> lw = new LambdaQueryWrapper<OrderDO>()
                 .eq(OrderDO::getUserId, userId)
                 .eq(status != null, OrderDO::getStatus, status);
-        if (keyword != null && !keyword.isBlank()) {
-            String kw = keyword.trim();
-            List<String> matchedOrderNos = orderItemMapper.selectOrderNosByTitleLike(kw);
-            lw.and(w -> {
-                w.like(OrderDO::getOrderNo, kw);
-                if (!matchedOrderNos.isEmpty()) {
-                    w.or().in(OrderDO::getOrderNo, matchedOrderNos);
-                }
-            });
-        }
+        applyKeyword(lw, keyword);
         lw.orderBy(true, "asc".equalsIgnoreCase(sort), OrderDO::getCreateTime);
         return toVOPage(orderMapper.selectPage(new Page<>(page, size), lw));
     }
 
-    public Page<OrderVO> pageByMerchant(Long merchantId, Integer status, int page, int size) {
-        Page<OrderDO> p = orderMapper.selectPage(new Page<>(page, size),
-                new LambdaQueryWrapper<OrderDO>()
-                        .eq(OrderDO::getMerchantId, merchantId)
-                        .eq(status != null, OrderDO::getStatus, status)
-                        .orderByDesc(OrderDO::getCreateTime));
-        return toVOPage(p);
+    /** 商家订单（仅本店）：status 状态筛选；keyword 匹配订单号 / 收货人 / 商品名 */
+    public Page<OrderVO> pageByMerchant(Long merchantId, Integer status, String keyword, int page, int size) {
+        LambdaQueryWrapper<OrderDO> lw = new LambdaQueryWrapper<OrderDO>()
+                .eq(OrderDO::getMerchantId, merchantId)
+                .eq(status != null, OrderDO::getStatus, status);
+        applyKeyword(lw, keyword);
+        lw.orderByDesc(OrderDO::getCreateTime);
+        return toVOPage(orderMapper.selectPage(new Page<>(page, size), lw));
     }
 
-    public Page<OrderVO> adminPage(Integer status, int page, int size) {
-        Page<OrderDO> p = orderMapper.selectPage(new Page<>(page, size),
-                new LambdaQueryWrapper<OrderDO>()
-                        .eq(status != null, OrderDO::getStatus, status)
-                        .orderByDesc(OrderDO::getCreateTime));
-        return toVOPage(p);
+    /** 平台订单（全局）：status 状态筛选；keyword 匹配订单号 / 收货人 / 商品名 */
+    public Page<OrderVO> adminPage(Integer status, String keyword, int page, int size) {
+        LambdaQueryWrapper<OrderDO> lw = new LambdaQueryWrapper<OrderDO>()
+                .eq(status != null, OrderDO::getStatus, status);
+        applyKeyword(lw, keyword);
+        lw.orderByDesc(OrderDO::getCreateTime);
+        return toVOPage(orderMapper.selectPage(new Page<>(page, size), lw));
+    }
+
+    /** 订单搜索公共条件：订单号 / 收货人 / 商品名（明细快照 title）任一命中 */
+    private void applyKeyword(LambdaQueryWrapper<OrderDO> lw, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return;
+        }
+        String kw = keyword.trim();
+        List<String> matchedOrderNos = orderItemMapper.selectOrderNosByTitleLike(kw);
+        lw.and(w -> {
+            w.like(OrderDO::getOrderNo, kw).or().like(OrderDO::getReceiverName, kw);
+            if (!matchedOrderNos.isEmpty()) {
+                w.or().in(OrderDO::getOrderNo, matchedOrderNos);
+            }
+        });
     }
 
     public OrderVO detail(String orderNo) {

@@ -11,7 +11,6 @@ export interface MerchantProfile {
   shopDesc?: string
   shopAddress?: string
   shopStatus: number
-  payCodeUrl?: string
   balance: number
   applyStatus: number
   status: number

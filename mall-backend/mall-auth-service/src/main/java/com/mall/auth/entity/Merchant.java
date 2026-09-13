@@ -9,8 +9,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 商家（账号+入驻审核+店铺+收款码合并，物理保留）。
- * 仅本服务需要认证字段；业务维度（店铺/收款码）由 merchant-service 持有。
+ * 商家（账号+入驻审核+店铺合并，物理保留）。
+ * 仅本服务需要认证字段；业务维度（店铺信息）由 merchant-service 持有。
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -44,8 +44,6 @@ public class Merchant extends BaseDO {
 
     /** 0 营业 1 停业 */
     private Integer shopStatus;
-
-    private String payCodeUrl;
 
     /** 账号状态：0 正常 1 禁用 */
     private Integer status;

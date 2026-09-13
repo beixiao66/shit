@@ -7,14 +7,22 @@ const balance = ref('0.00')
 const list = ref<Withdrawal[]>([])
 const total = ref(0)
 const page = ref(1)
+const pageSize = ref(10)
 const submiting = ref(false)
 const form = reactive({ bankName: '', accountNo: '', holder: '', amount: 0 as number })
 
 async function load() {
-  const [shop, res] = await Promise.all([getShop(), getMyWithdrawals(page.value, 10)])
+  const [shop, res] = await Promise.all([getShop(), getMyWithdrawals(page.value, pageSize.value)])
   balance.value = shop.balance.toFixed(2)
   list.value = res.records
   total.value = res.total
+}
+
+/** 切换每页条数：回到第 1 页重查 */
+function onSizeChange(size: number) {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
 async function submit() {
@@ -84,12 +92,15 @@ onMounted(load)
     </el-table>
 
     <el-pagination
-      v-if="total > 10"
+      v-if="total > 0"
       v-model:current-page="page"
       class="pager"
-      layout="prev, pager, next, total"
+      layout="sizes, prev, pager, next, total"
+      :page-size="pageSize"
+      :page-sizes="[10, 20, 50]"
       :total="total"
       @current-change="load"
+      @size-change="onSizeChange"
     />
   </div>
 </template>

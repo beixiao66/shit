@@ -17,11 +17,13 @@ public class AdminOrderController {
 
     private final OrderService orderService;
 
+    /** keyword 支持订单号/收货人/商品名模糊搜索 */
     @GetMapping
     public Result<Page<OrderVO>> list(@RequestParam(required = false) Integer status,
+                                      @RequestParam(required = false) String keyword,
                                       @RequestParam(defaultValue = "1") int page,
                                       @RequestParam(defaultValue = "10") int size) {
-        return Result.ok(orderService.adminPage(status, page, size));
+        return Result.ok(orderService.adminPage(status, keyword, page, size));
     }
 
     @PutMapping("/{orderNo}/ship")

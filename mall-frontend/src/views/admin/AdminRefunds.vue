@@ -5,12 +5,20 @@ import { getRefunds, type RefundRecord } from '@/api/pay'
 const list = ref<RefundRecord[]>([])
 const total = ref(0)
 const page = ref(1)
+const pageSize = ref(10)
 const status = ref<number | undefined>(undefined)
 
 async function load() {
-  const res = await getRefunds(status.value, page.value, 10)
+  const res = await getRefunds(status.value, page.value, pageSize.value)
   list.value = res.records
   total.value = res.total
+}
+
+/** 切换每页条数：回到第 1 页重查 */
+function onSizeChange(size: number) {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
 onMounted(load)
@@ -52,12 +60,15 @@ onMounted(load)
     </el-table>
 
     <el-pagination
-      v-if="total > 10"
+      v-if="total > 0"
       v-model:current-page="page"
       class="pager"
-      layout="prev, pager, next, total"
+      layout="sizes, prev, pager, next, total"
+      :page-size="pageSize"
+      :page-sizes="[10, 20, 50]"
       :total="total"
       @current-change="load"
+      @size-change="onSizeChange"
     />
   </div>
 </template>

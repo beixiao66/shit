@@ -8,6 +8,7 @@ import ImageUpload from '@/components/ImageUpload.vue'
 const list = ref<Product[]>([])
 const total = ref(0)
 const page = ref(1)
+const pageSize = ref(10)
 const categories = ref<Category[]>([])
 const dialog = ref(false)
 const editingId = ref<number>()
@@ -30,9 +31,16 @@ const form = reactive({
 })
 
 async function load() {
-  const res = await getMyProducts(page.value, 10)
+  const res = await getMyProducts(page.value, pageSize.value)
   list.value = res.records
   total.value = Number(res.total)
+}
+
+/** 切换每页条数：回到第 1 页重查 */
+function onSizeChange(size: number) {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
 /** 类目 → 关联规格名（选择类目后，规格名仅显示该类目相关的项） */
@@ -215,11 +223,15 @@ onMounted(async () => {
     </el-table>
 
     <el-pagination
+      v-if="total > 0"
       v-model:current-page="page"
       class="pager"
-      layout="prev, pager, next, total"
+      layout="sizes, prev, pager, next, total"
+      :page-size="pageSize"
+      :page-sizes="[10, 20, 50]"
       :total="total"
       @current-change="load"
+      @size-change="onSizeChange"
     />
 
     <el-dialog v-model="dialog" :title="editingId ? '编辑商品' : '新建商品'" width="760">

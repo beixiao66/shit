@@ -6,13 +6,21 @@ import { createEmployee, getEmployees, updateEmployeeStatus, type EmployeeRow } 
 const list = ref<EmployeeRow[]>([])
 const total = ref(0)
 const page = ref(1)
+const pageSize = ref(10)
 const dialog = ref(false)
 const form = reactive({ username: '', password: '', nickname: '', phone: '' })
 
 async function load() {
-  const res = await getEmployees(page.value, 10)
+  const res = await getEmployees(page.value, pageSize.value)
   list.value = res.records
   total.value = res.total
+}
+
+/** 切换每页条数：回到第 1 页重查 */
+function onSizeChange(size: number) {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
 async function submit() {
@@ -70,12 +78,15 @@ onMounted(load)
     </el-table>
 
     <el-pagination
-      v-if="total > 10"
+      v-if="total > 0"
       v-model:current-page="page"
       class="pager"
-      layout="prev, pager, next, total"
+      layout="sizes, prev, pager, next, total"
+      :page-size="pageSize"
+      :page-sizes="[10, 20, 50]"
       :total="total"
       @current-change="load"
+      @size-change="onSizeChange"
     />
 
     <el-dialog v-model="dialog" title="新增员工" width="420">
