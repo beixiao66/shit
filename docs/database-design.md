@@ -101,7 +101,6 @@ public class BaseLogicDO extends BaseDO {   // 仅内容类表继承
 | shop_desc | TEXT | | |
 | shop_address | VARCHAR(255) | | |
 | shop_status | TINYINT | 0 营业 1 停业 | |
-| pay_code_url | VARCHAR(255) | | **原 pay_code 并入**：商家的支付宝收款码图片 |
 | status | TINYINT | 0 正常 1 禁用 | 账号状态（与 apply_status 区分） |
 | balance | DECIMAL(12,2) | DEFAULT 0 | **可提现余额**：支付成功 +amount、提现申请 -amount、提现驳回 +amount（资金规则 §4） |
 
@@ -172,7 +171,6 @@ public class BaseLogicDO extends BaseDO {   // 仅内容类表继承
 |---|---|---|
 | title | VARCHAR(64) NOT NULL | |
 | img_url | VARCHAR(255) NOT NULL | |
-| link_url | VARCHAR(255) | 跳转商品/类目页 |
 | sort | INT | |
 | status | TINYINT | 0 启用 1 停用 |
 
@@ -324,7 +322,7 @@ Sharding-JDBC 分片对象 order + order_item，分片键 order_id（雪花）�
 | employee | 并入 user（role 字段） |
 | merchant_apply | 并入 merchant（apply_status 字段） |
 | shop | 并入 merchant（shop_* 字段） |
-| pay_code | 并入 merchant（pay_code_url 字段） |
+| pay_code | 曾并入 merchant（pay_code_url 字段）；2026-09-13 随店铺表单去收款码一并移除 |
 | bank_card | 并入 withdrawal（卡号快照字段） |
 | delivery | 并入 order（logistics/tracking/send/receive 字段） |
 | order_status_log | 并入 order（last_status）+ status 状态机校验 |

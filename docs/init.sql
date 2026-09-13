@@ -68,7 +68,6 @@ CREATE TABLE merchant (
     shop_desc     TEXT                   COMMENT '店铺介绍',
     shop_address  VARCHAR(255)           COMMENT '店铺地址',
     shop_status   TINYINT       NOT NULL DEFAULT 0 COMMENT '0 营业 1 停业',
-    pay_code_url  VARCHAR(255)           COMMENT '支付宝收款码图片',
     status        TINYINT       NOT NULL DEFAULT 0 COMMENT '账号状态 0 正常 1 禁用',
     balance       DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '可提现余额:支付成功+/提现申请-/提现驳回+',
     create_time   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -157,7 +156,6 @@ CREATE TABLE advert (
     id          BIGINT       NOT NULL,
     title       VARCHAR(64)  NOT NULL,
     img_url     VARCHAR(255) NOT NULL,
-    link_url    VARCHAR(255)          COMMENT '跳转链接(商品/类目页)',
     sort        INT          NOT NULL DEFAULT 0,
     status      TINYINT      NOT NULL DEFAULT 0 COMMENT '0 启用 1 停用',
     deleted     TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除 0 正常 1 删除',
@@ -343,11 +341,11 @@ INSERT INTO sku (id, product_id, spec_json, price, stock, status, remark) VALUES
 (23, 13, '{"颜色":"灰色"}', 169.00, 350, 0, NULL);
 
 -- 广告位
-INSERT INTO advert (id, title, img_url, link_url, sort, status) VALUES
-(1, '开学季数码专场', '/img/ad/ad1.jpg', '/category/1', 1, 0),
-(2, '新品服饰上市', '/img/ad/ad2.jpg', '/category/3', 2, 0),
-(3, '数码周大促', '/img/ad/ad3.jpg', '/category/1', 3, 0),
-(4, '焕新穿搭季', '/img/ad/ad4.jpg', '/category/3', 4, 0);
+INSERT INTO advert (id, title, img_url, sort, status) VALUES
+(1, '开学季数码专场', '/img/ad/ad1.jpg', 1, 0),
+(2, '新品服饰上市', '/img/ad/ad2.jpg', 2, 0),
+(3, '数码周大促', '/img/ad/ad3.jpg', 3, 0),
+(4, '焕新穿搭季', '/img/ad/ad4.jpg', 4, 0);
 
 -- 用户地址（user1 默认收货地址）
 INSERT INTO user_address (id, user_id, receiver, phone, province, city, district, detail, is_default) VALUES
