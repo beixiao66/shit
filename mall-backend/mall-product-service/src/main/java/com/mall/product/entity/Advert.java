@@ -5,7 +5,7 @@ import com.mall.common.BaseLogicDO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-/** 首页广告位（逻辑删除） */
+/** 首页轮播广告位（逻辑删除；纯展示无跳转链接） */
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("advert")
@@ -14,8 +14,6 @@ public class Advert extends BaseLogicDO {
     private String title;
 
     private String imgUrl;
-
-    private String linkUrl;
 
     private Integer sort;
 

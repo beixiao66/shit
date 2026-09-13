@@ -114,7 +114,7 @@ onMounted(() => {
 
 <style scoped>
 .shop-page {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }

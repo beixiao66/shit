@@ -1,5 +1,6 @@
 package com.mall.order.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.mall.common.BaseDO;
 import lombok.Data;
@@ -30,4 +31,8 @@ public class OrderItem extends BaseDO {
     private Integer count;
 
     private BigDecimal amount;
+
+    /** 商品主图（非表字段：列表展示时实时读 product.main_img，见 OrderService#fillItemImg） */
+    @TableField(exist = false)
+    private String mainImg;
 }

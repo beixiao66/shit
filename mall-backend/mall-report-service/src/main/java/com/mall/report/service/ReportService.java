@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,8 @@ public class ReportService {
         result.put("outgoing", refundOut.add(withdrawalOut)); // 出账合计
         result.put("merchantCount", merchantId == null ? reportMapper.merchantCount(null) : 1L);
         result.put("withdrawalCount", reportMapper.withdrawalCount(merchantId));
-        result.put("dailyTrend", reportMapper.dailyTrend(merchantId, 7));
+        // 近 7 个自然日（含今天）：起始日与前端 x 轴补零的日期范围一致
+        result.put("dailyTrend", reportMapper.dailyTrend(merchantId, LocalDate.now().minusDays(6)));
         result.put("merchantStats", merchantId == null ? reportMapper.merchantStats() : null);
         result.put("financeFlow", reportMapper.financeFlow(merchantId));
         return result;

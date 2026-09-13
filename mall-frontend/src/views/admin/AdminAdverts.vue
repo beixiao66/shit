@@ -7,7 +7,7 @@ import ImageUpload from '@/components/ImageUpload.vue'
 const list = ref<Advert[]>([])
 const dialog = ref(false)
 const editing = ref<Advert | null>(null)
-const form = reactive({ title: '', imgUrl: '', linkUrl: '', sort: 0, status: 0 })
+const form = reactive({ title: '', imgUrl: '', sort: 0, status: 0 })
 
 async function load() {
   list.value = await adminListAdverts()
@@ -15,13 +15,13 @@ async function load() {
 
 function openCreate() {
   editing.value = null
-  Object.assign(form, { title: '', imgUrl: '', linkUrl: '', sort: 0, status: 0 })
+  Object.assign(form, { title: '', imgUrl: '', sort: 0, status: 0 })
   dialog.value = true
 }
 
 function openEdit(row: Advert) {
   editing.value = row
-  Object.assign(form, row)
+  Object.assign(form, { title: row.title, imgUrl: row.imgUrl, sort: row.sort, status: row.status })
   dialog.value = true
 }
 
@@ -54,7 +54,6 @@ onMounted(load)
       </el-table-column>
       <el-table-column prop="title" label="标题" />
       <el-table-column prop="imgUrl" label="图片" show-overflow-tooltip />
-      <el-table-column prop="linkUrl" label="跳转链接" show-overflow-tooltip />
       <el-table-column prop="sort" label="排序" width="80" />
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -76,9 +75,6 @@ onMounted(load)
         </el-form-item>
         <el-form-item label="图片">
           <ImageUpload v-model="form.imgUrl" :upload="uploadAdvertImage" placeholder="或粘贴图片 URL" />
-        </el-form-item>
-        <el-form-item label="跳转链接">
-          <el-input v-model="form.linkUrl" />
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="form.sort" :min="0" />

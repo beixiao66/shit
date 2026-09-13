@@ -16,18 +16,17 @@ const TABS = [
 const orders = ref<OrderVO[]>([])
 const total = ref(0)
 const page = ref(1)
+const pageSize = ref(10)
 const status = ref<number | undefined>(undefined)
+/** 搜索关键字：订单号 / 商品名 */
+const keyword = ref('')
+/** 下单时间排序：desc 从新到旧（默认）/ asc 从旧到新 */
+const sort = ref<'asc' | 'desc'>('desc')
 /** el-tabs 选中项（与 status 对应，string 类型便于绑定） */
 const activeKey = ref('all')
 const loading = ref(false)
 /** 各状态数量（顶部统计栏；undefined 为全部） */
 const counts = ref<Record<number, number>>({})
-
-/** 商品 emoji 图标（无图场景兜底，skuId 稳定取模） */
-function itemIcon(skuId: number | string): string {
-  const ICONS = ['📦', '📱', '🎧', '👕', '📷', '🔌', '🔊', '⌨️', '🧢', '🧣', '🥿', '🎒']
-  return ICONS[Number(skuId) % ICONS.length]
-}
 
 /** 规格 JSON → 可读文本 */
 function formatSpec(specJson?: string): string {
@@ -44,7 +43,13 @@ function formatSpec(specJson?: string): string {
 async function load() {
   loading.value = true
   try {
-    const res = await getMyOrders(status.value, page.value, 10)
+    const res = await getMyOrders({
+      status: status.value,
+      keyword: keyword.value.trim() || undefined,
+      sort: sort.value,
+      page: page.value,
+      size: pageSize.value,
+    })
     orders.value = res.records
     total.value = res.total
   } finally {
@@ -52,12 +57,12 @@ async function load() {
   }
 }
 
-/** 顶部统计栏：并行取各状态数量 */
+/** 顶部统计栏：并行取各状态数量（统计全部订单，不受搜索条件影响） */
 async function loadCounts() {
   try {
     const entries = await Promise.all(
       TABS.map(async (t) => {
-        const res = await getMyOrders(t.value, 1, 1)
+        const res = await getMyOrders({ status: t.value, page: 1, size: 1 })
         return [t.value ?? -1, res.total] as [number, number]
       }),
     )
@@ -65,6 +70,25 @@ async function loadCounts() {
   } catch {
     /* 统计失败不影响列表 */
   }
+}
+
+/** 搜索（订单号/商品名）：回到第 1 页重查 */
+function onSearch() {
+  page.value = 1
+  load()
+}
+
+/** 切换排序：回到第 1 页重查 */
+function onSortChange() {
+  page.value = 1
+  load()
+}
+
+/** 切换每页条数：回到第 1 页重查 */
+function onSizeChange(size: number) {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
 function pickTab(key: string) {
@@ -110,8 +134,28 @@ onMounted(() => {
   <div class="orders">
     <header class="head">
       <router-link class="brand" to="/"><span class="brand-logo">MX</span><span class="brand-sub">我的订单</span></router-link>
+      <router-link class="nav-link" to="/">← 返回首页</router-link>
       <router-link class="nav-link" to="/cart">购物车</router-link>
     </header>
+
+    <section class="filter">
+      <el-input
+        v-model="keyword"
+        class="filter-search"
+        placeholder="搜索订单号 / 商品名"
+        clearable
+        @keyup.enter="onSearch"
+        @clear="onSearch"
+      >
+        <template #append>
+          <el-button @click="onSearch">搜索</el-button>
+        </template>
+      </el-input>
+      <el-select v-model="sort" class="filter-sort" @change="onSortChange">
+        <el-option label="下单时间：从新到旧" value="desc" />
+        <el-option label="下单时间：从旧到新" value="asc" />
+      </el-select>
+    </section>
 
     <section class="stats">
       <div
@@ -141,7 +185,10 @@ onMounted(() => {
         <section class="order-body">
           <div class="order-goods">
             <p v-for="(it, i) in o.items" :key="i" class="item">
-              <span class="item-icon" :class="itemIcon(it.skuId)">{{ ['📱', '🎧', '👕', '📱', '🔌', '🔊', '⌨️', '🧢', '🧣', '🧥', '🥿', '🎒'][Number(it.skuId) % 12] }}</span>
+              <span class="item-img">
+                <img v-if="it.mainImg" :src="it.mainImg" :alt="it.title" />
+                <span v-else class="item-img-fallback">无图</span>
+              </span>
               <span class="item-title">{{ it.title }}</span>
               <span class="item-spec">{{ formatSpec(it.specJson) }}</span>
               <span class="md-num item-qty">×{{ it.count }}</span>
@@ -175,12 +222,15 @@ onMounted(() => {
 
       <el-empty v-if="!orders.length" description="暂无订单" />
       <el-pagination
-        v-if="total > 10"
+        v-if="total > 0"
         v-model:current-page="page"
         class="pager"
-        layout="prev, pager, next"
+        layout="sizes, prev, pager, next, total"
+        :page-size="pageSize"
+        :page-sizes="[10, 20, 50]"
         :total="total"
         @current-change="load"
+        @size-change="onSizeChange"
       />
     </template>
   </div>
@@ -188,7 +238,7 @@ onMounted(() => {
 
 <style scoped>
 .orders {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }
@@ -227,6 +277,19 @@ onMounted(() => {
 }
 .nav-link:hover {
   color: var(--mx-red);
+}
+
+/* 搜索 + 排序 */
+.filter {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+.filter-search {
+  max-width: 360px;
+}
+.filter-sort {
+  width: 190px;
 }
 
 /* 顶部统计栏 */
@@ -318,9 +381,26 @@ onMounted(() => {
   font-size: 14px;
   color: var(--mx-ink);
 }
-.item-icon {
-  font-size: 26px;
-  line-height: 1;
+.item-img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--mx-bg-2);
+  flex-shrink: 0;
+}
+.item-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.item-img-fallback {
+  font-size: 11px;
+  color: var(--mx-ink-2);
 }
 .item-title {
   min-width: 140px;

@@ -6,6 +6,7 @@
 node_modules/
 dist/
 *.local
+.vite/
 
 # OS
 .DS_Store

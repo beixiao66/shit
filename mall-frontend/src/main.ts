@@ -1,6 +1,8 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
+// 中文语言包：分页 total 等内置文案显示为"共 N 条"（默认英文 Total）
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 
 import App from './App.vue'
@@ -13,5 +15,5 @@ import './styles/base.css'
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus)
+app.use(ElementPlus, { locale: zhCn })
 app.mount('#app')

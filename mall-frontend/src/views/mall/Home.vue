@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { CircleCheck, RefreshLeft, Service, Top, Van } from '@element-plus/icons-vue'
 import { getAdverts, getCategories, type Advert, type Category } from '@/api/catalog'
 import { getProductList, type Product } from '@/api/product'
 import { getCart } from '@/api/cart'
@@ -12,11 +13,40 @@ const router = useRouter()
 const categories = ref<Category[]>([])
 const adverts = ref<Advert[]>([])
 const products = ref<Product[]>([])
+/** 热销推荐（按销量倒序取前 8） */
+const hotProducts = ref<Product[]>([])
 const total = ref(0)
 const loading = ref(false)
 const activeCategory = ref<number>()
 const keyword = ref('')
 const cartCount = ref(0)
+/** 回到顶部按钮显隐 */
+const showTop = ref(false)
+
+/** 服务保障条（静态展示，放在原广告条位置） */
+const SERVICES = [
+  { icon: CircleCheck, title: '正品保障', sub: '入驻商家实名审核' },
+  { icon: Van, title: '极速发货', sub: '下单后 48 小时内发出' },
+  { icon: RefreshLeft, title: '7 天无理由', sub: '签收后 7 天内可退' },
+  { icon: Service, title: '售后无忧', sub: '平台介入处理纠纷' },
+]
+
+async function loadHot() {
+  try {
+    const page = await getProductList({ page: 1, size: 6, sort: 'sale' })
+    hotProducts.value = page.records
+  } catch {
+    /* 热销区非关键路径，失败静默 */
+  }
+}
+
+function onScroll() {
+  showTop.value = window.scrollY > 600
+}
+
+function scrollTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
 async function loadCartCount() {
   if (!userStore.token) return
@@ -66,21 +96,6 @@ function gotoBanner(i: number) {
   startBanner()
 }
 
-/** 广告 linkUrl 形如 /category/1 —— 解析为分类并重新加载商品 */
-function jumpAd(linkUrl?: string) {
-  if (!linkUrl) return
-  const m = linkUrl.match(/\/category\/(\d+)/)
-  if (m) {
-    const cat = categories.value.find((c) => String(c.id) === m[1] && c.parentId === 0)
-    if (cat) {
-      pickCategory(cat.id)
-      document.querySelector('.grid')?.scrollIntoView({ behavior: 'smooth' })
-      return
-    }
-  }
-  router.push(linkUrl)
-}
-
 async function loadCategories() {
   categories.value = await getCategories()
 }
@@ -90,7 +105,7 @@ async function loadAdverts() {
   startBanner()
 }
 
-const PAGE_SIZE = 12
+const pageSize = ref(12)
 const currentPage = ref(1)
 
 async function loadProducts() {
@@ -98,9 +113,9 @@ async function loadProducts() {
   try {
     const page = await getProductList({
       page: currentPage.value,
-      size: PAGE_SIZE,
+      size: pageSize.value,
       categoryId: activeCategory.value,
-      keyword: keyword.value || undefined,
+      keyword: keyword.value.trim() || undefined,
     })
     products.value = page.records
     total.value = Number(page.total)
@@ -117,9 +132,12 @@ function pickCategory(id?: number | string) {
   loadProducts()
 }
 
+/** 搜索商品名/店铺名：重置类目与页码并滚到结果区（结果区在轮播图下方，不滚动会像"没反应"） */
 function onSearch() {
+  activeCategory.value = undefined
   currentPage.value = 1
   loadProducts()
+  document.querySelector('.grid')?.scrollIntoView({ behavior: 'smooth' })
 }
 
 function onPageChange(p: number) {
@@ -128,14 +146,26 @@ function onPageChange(p: number) {
   document.querySelector('.grid')?.scrollIntoView({ behavior: 'smooth' })
 }
 
+/** 切换每页条数：回到第 1 页重查 */
+function onSizeChange(size: number) {
+  pageSize.value = size
+  currentPage.value = 1
+  loadProducts()
+}
+
 onMounted(() => {
   loadCategories()
   loadAdverts()
   loadProducts()
+  loadHot()
   loadCartCount()
   startBanner()
+  window.addEventListener('scroll', onScroll, { passive: true })
 })
-onBeforeUnmount(stopBanner)
+onBeforeUnmount(() => {
+  stopBanner()
+  window.removeEventListener('scroll', onScroll)
+})
 </script>
 
 <template>
@@ -154,6 +184,7 @@ onBeforeUnmount(stopBanner)
           <span class="cart-txt">购物车</span>
           <span v-if="cartCount" class="cart-badge md-num">{{ cartCount }}</span>
         </router-link>
+        <router-link v-if="userStore.token" class="nav-link" to="/orders">我的订单</router-link>
         <template v-if="userStore.token">
           <el-dropdown trigger="click" @command="onUserCommand">
             <span class="nav-link hi">
@@ -162,7 +193,6 @@ onBeforeUnmount(stopBanner)
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-                <el-dropdown-item command="orders">我的订单</el-dropdown-item>
                 <el-dropdown-item v-if="userStore.type === 1 || userStore.type === 2" command="admin">工作台</el-dropdown-item>
                 <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -177,6 +207,13 @@ onBeforeUnmount(stopBanner)
     </header>
 
     <nav class="cat-walk">
+      <span
+        class="cat"
+        :class="{ cat_active: activeCategory === undefined }"
+        @click="pickCategory(undefined)"
+      >
+        查看全部
+      </span>
       <span
         v-for="c in categories"
         :key="c.id"
@@ -196,7 +233,6 @@ onBeforeUnmount(stopBanner)
         :class="{ banner_show: bannerIndex === i }"
         :src="ad.imgUrl"
         :alt="ad.title"
-        @click="jumpAd(ad.linkUrl)"
       />
       <div class="banner-dots">
         <span
@@ -209,11 +245,41 @@ onBeforeUnmount(stopBanner)
       </div>
     </section>
 
-    <section v-if="adverts.length" class="advert-strip">
-      <a v-for="ad in adverts" :key="ad.id" class="advert" href="#" :title="ad.title" @click.prevent="jumpAd(ad.linkUrl)">
-        <img :src="ad.imgUrl" :alt="ad.title" />
-      </a>
+    <section class="promise">
+      <div v-for="s in SERVICES" :key="s.title" class="promise-item">
+        <el-icon class="promise-icon" :size="26"><component :is="s.icon" /></el-icon>
+        <div class="promise-text">
+          <p class="promise-title">{{ s.title }}</p>
+          <p class="promise-sub">{{ s.sub }}</p>
+        </div>
+      </div>
     </section>
+
+    <section v-if="hotProducts.length" class="hot">
+      <div class="section-head">
+        <h2 class="section-title">热销好物</h2>
+        <span class="section-sub">按销量排序</span>
+      </div>
+      <div class="hot-grid">
+        <router-link v-for="p in hotProducts" :key="`hot-${p.id}`" class="card" :to="`/product/${p.id}`">
+          <div class="card-img"><img :src="p.mainImg" :alt="p.title" /></div>
+          <div class="card-body">
+            <p class="card-title">{{ p.title }}</p>
+            <p class="card-seller">
+              <span class="seller-mark">MX</span> {{ p.shopName }}
+            </p>
+            <div class="card-foot">
+              <span class="price">¥ <b class="md-num">{{ p.minPrice?.toFixed(2) }}</b></span>
+              <span class="sale md-num">已售 {{ p.saleCount ?? 0 }}</span>
+            </div>
+          </div>
+        </router-link>
+      </div>
+    </section>
+
+    <div class="section-head all-head">
+      <h2 class="section-title">全部商品</h2>
+    </div>
 
     <section v-loading="loading" class="grid">
       <router-link v-for="p in products" :key="String(p.id)" class="card" :to="`/product/${p.id}`">
@@ -229,25 +295,60 @@ onBeforeUnmount(stopBanner)
           </div>
         </div>
       </router-link>
-      <p v-if="!loading && !products.length" class="empty">空货架 —— 商家上架后自动出现</p>
+      <p v-if="!loading && !products.length" class="empty">
+        {{ keyword.trim() ? `没有找到「${keyword.trim()}」相关商品，换个关键词试试` : '空货架 —— 商家上架后自动出现' }}
+      </p>
     </section>
 
     <div v-if="total" class="pager">
       <el-pagination
         background
-        layout="prev, pager, next, total"
+        layout="prev, pager, next, sizes, total"
         :total="total"
-        :page-size="PAGE_SIZE"
+        :page-size="pageSize"
+        :page-sizes="[12, 24, 36]"
         :current-page="currentPage"
         @current-change="onPageChange"
+        @size-change="onSizeChange"
       />
     </div>
+
+    <footer class="foot">
+      <div class="foot-cols">
+        <div class="foot-col">
+          <p class="foot-title">Mall-X 多商家商城</p>
+          <p class="foot-text">
+            多商家入驻的高并发电商平台。用户可浏览选购、下单支付、跟踪物流并确认收货；
+            商家可提交入驻、经营店铺、处理发货与提现；平台负责类目、广告位与商家审核。
+          </p>
+        </div>
+        <div class="foot-col">
+          <p class="foot-title">商家服务</p>
+          <p class="foot-text">
+            在线提交入驻申请，审核通过后维护商品、规格与库存，处理店铺订单发货，
+            查看本店营收看板，申请余额提现 —— 经营状况一目了然。
+          </p>
+        </div>
+        <div class="foot-col">
+          <p class="foot-title">平台保障</p>
+          <p class="foot-text">
+            入驻商家实名审核，订单全链路状态可追溯；下单幂等、库存缓存与数据库双重扣减、
+            支付回调验签，为每一笔交易保驾护航。
+          </p>
+        </div>
+      </div>
+      <p class="foot-copy">© 2026 Mall-X 多商家商城 · 教学实训项目 · 仅用于演示</p>
+    </footer>
+
+    <button v-show="showTop" class="to-top" title="回到顶部" @click="scrollTop">
+      <el-icon :size="18"><Top /></el-icon>
+    </button>
   </div>
 </template>
 
 <style scoped>
 .home {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 0 24px 64px;
 }
@@ -431,30 +532,65 @@ onBeforeUnmount(stopBanner)
   width: 22px;
 }
 
-/* 广告条（小卡横排） */
-.advert-strip {
-  display: flex;
+/* 服务保障条（原广告条位置） */
+.promise {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 22px;
-  flex-wrap: wrap;
 }
-.advert {
-  flex: 1;
-  min-width: 200px;
-  height: 84px;
+.promise-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--mx-line);
   border-radius: 10px;
-  overflow: hidden;
-  position: relative;
-  display: block;
+  background: #fff;
 }
-.advert img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.2s ease;
+.promise-icon {
+  color: var(--mx-red);
+  flex-shrink: 0;
 }
-.advert:hover img {
-  transform: scale(1.04);
+.promise-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.promise-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--mx-ink-2);
+}
+
+/* 区块标题（热销 / 全部商品） */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 26px 0 14px;
+}
+.all-head {
+  margin-top: 30px;
+}
+.section-title {
+  margin: 0;
+  font-family: var(--md-font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--mx-ink);
+}
+.section-sub {
+  font-size: 12px;
+  color: var(--mx-ink-2);
+}
+
+/* 热销推荐：与下方"全部商品"同尺寸同列数（一行的卡片大小完全一致） */
+.hot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 16px;
 }
 
 /* 商品网格 5 列 */
@@ -552,6 +688,63 @@ onBeforeUnmount(stopBanner)
   margin-top: 28px;
 }
 
+/* 页脚 */
+.foot {
+  margin-top: 48px;
+  padding-top: 26px;
+  border-top: 1px solid var(--mx-line);
+}
+.foot-cols {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+.foot-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.foot-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--mx-ink-2);
+}
+.foot-copy {
+  margin: 26px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--mx-line);
+  font-size: 12px;
+  text-align: center;
+  color: var(--mx-ink-2);
+}
+
+/* 回到顶部 */
+.to-top {
+  position: fixed;
+  right: 32px;
+  bottom: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--mx-line);
+  background: #fff;
+  color: var(--mx-ink);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(29, 33, 41, 0.12);
+  transition: all 0.15s ease;
+  z-index: 20;
+}
+.to-top:hover {
+  border-color: var(--mx-red);
+  color: var(--mx-red);
+  transform: translateY(-2px);
+}
+
 @media (max-width: 860px) {
   .nav {
     flex-wrap: wrap;
@@ -562,6 +755,14 @@ onBeforeUnmount(stopBanner)
   }
   .banner-wrap {
     height: 210px;
+  }
+  .promise,
+  .hot-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .foot-cols {
+    grid-template-columns: 1fr;
+    gap: 18px;
   }
 }
 </style>

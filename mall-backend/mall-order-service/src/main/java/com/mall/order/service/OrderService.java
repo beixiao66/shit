@@ -54,6 +54,7 @@ public class OrderService {
     private final SkuOrderMapper skuOrderMapper;
     private final ProductMerchantMapper productMerchantMapper;
     private final ProductTitleMapper productTitleMapper;
+    private final ProductImgMapper productImgMapper;
     private final PayInfoMapper payInfoMapper;
 
     private final StringRedisTemplate redisTemplate;
@@ -262,13 +263,26 @@ public class OrderService {
     // 查询
     // -----------------------------------------------------
 
-    public Page<OrderVO> pageByUser(Long userId, Integer status, int page, int size) {
-        Page<OrderDO> p = orderMapper.selectPage(new Page<>(page, size),
-                new LambdaQueryWrapper<OrderDO>()
-                        .eq(OrderDO::getUserId, userId)
-                        .eq(status != null, OrderDO::getStatus, status)
-                        .orderByDesc(OrderDO::getCreateTime));
-        return toVOPage(p);
+    /**
+     * 我的订单：status 状态筛选；keyword 匹配订单号或商品名（明细快照 title）；
+     * sort=asc 按下单时间正序，其余（默认）倒序。
+     */
+    public Page<OrderVO> pageByUser(Long userId, Integer status, String keyword, String sort, int page, int size) {
+        LambdaQueryWrapper<OrderDO> lw = new LambdaQueryWrapper<OrderDO>()
+                .eq(OrderDO::getUserId, userId)
+                .eq(status != null, OrderDO::getStatus, status);
+        if (keyword != null && !keyword.isBlank()) {
+            String kw = keyword.trim();
+            List<String> matchedOrderNos = orderItemMapper.selectOrderNosByTitleLike(kw);
+            lw.and(w -> {
+                w.like(OrderDO::getOrderNo, kw);
+                if (!matchedOrderNos.isEmpty()) {
+                    w.or().in(OrderDO::getOrderNo, matchedOrderNos);
+                }
+            });
+        }
+        lw.orderBy(true, "asc".equalsIgnoreCase(sort), OrderDO::getCreateTime);
+        return toVOPage(orderMapper.selectPage(new Page<>(page, size), lw));
     }
 
     public Page<OrderVO> pageByMerchant(Long merchantId, Integer status, int page, int size) {
@@ -355,8 +369,21 @@ public class OrderService {
         vo.setCreateTime(o.getCreateTime());
         List<OrderItem> items = orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
                 .eq(OrderItem::getOrderNo, o.getOrderNo()));
+        fillItemImg(items);
         vo.setItems(items);
         return vo;
+    }
+
+    /** 订单明细补商品主图：实时读 product.main_img（商品已删除则该行为空，前端显示占位） */
+    private void fillItemImg(List<OrderItem> items) {
+        if (items.isEmpty()) {
+            return;
+        }
+        List<Long> productIds = items.stream().map(OrderItem::getProductId).distinct().toList();
+        Map<Long, String> imgById = productImgMapper.selectImgByKeys(productIds).stream()
+                .filter(p -> p.getMainImg() != null)
+                .collect(Collectors.toMap(ProductImg::getId, ProductImg::getMainImg, (a, b) -> a));
+        items.forEach(i -> i.setMainImg(imgById.get(i.getProductId())));
     }
 
     private String genOrderNo(Long userId) {

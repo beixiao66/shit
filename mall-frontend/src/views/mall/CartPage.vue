@@ -217,6 +217,7 @@ onMounted(load)
   <div class="cart">
     <header class="head">
       <router-link class="brand" to="/"><span class="brand-logo">MX</span><span class="brand-sub">购物车</span></router-link>
+      <router-link class="nav-link" to="/">← 返回首页</router-link>
       <router-link class="nav-link" to="/orders">我的订单</router-link>
     </header>
 
@@ -313,7 +314,7 @@ onMounted(load)
 
 <style scoped>
 .cart {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }

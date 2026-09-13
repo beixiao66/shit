@@ -11,7 +11,6 @@ const form = reactive({
   shopLogo: '',
   shopDesc: '',
   shopAddress: '',
-  payCodeUrl: '',
 })
 
 async function load() {
@@ -23,7 +22,6 @@ async function load() {
       shopLogo: profile.value.shopLogo ?? '',
       shopDesc: profile.value.shopDesc ?? '',
       shopAddress: profile.value.shopAddress ?? '',
-      payCodeUrl: profile.value.payCodeUrl ?? '',
     })
   } finally {
     loading.value = false
@@ -60,9 +58,6 @@ onMounted(load)
       </el-form-item>
       <el-form-item label="店铺地址">
         <el-input v-model="form.shopAddress" />
-      </el-form-item>
-      <el-form-item label="收款码">
-        <ImageUpload v-model="form.payCodeUrl" :upload="uploadMerchantImage" placeholder="或粘贴收款码图片 URL" />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="submit">保存</el-button>

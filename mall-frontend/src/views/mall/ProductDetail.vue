@@ -314,7 +314,7 @@ onMounted(load)
 
 <style scoped>
 .detail {
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 28px 24px 64px;
   display: grid;

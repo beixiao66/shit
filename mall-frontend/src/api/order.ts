@@ -9,6 +9,8 @@ export interface OrderItem {
   price: number
   count: number
   amount: number
+  /** 商品主图（后端实时关联 product.main_img；商品已删除时为空） */
+  mainImg?: string
 }
 
 export interface OrderVO {
@@ -61,8 +63,18 @@ export const STATUS_TEXT: Record<number, string> = {
 // 用户侧
 export const createOrder = (payload: CreateOrderPayload) =>
   http.post<never, string[]>('/order/create', payload)
-export const getMyOrders = (status?: number, page = 1, size = 10) =>
-  http.get<never, Page<OrderVO>>('/order/list', { params: { status, page, size } })
+/** 我的订单查询：status 状态筛选、keyword 订单号/商品名搜索、sort 下单时间排序 */
+export interface MyOrderQuery {
+  status?: number
+  keyword?: string
+  /** 下单时间排序：desc 倒序（默认）/ asc 正序 */
+  sort?: 'asc' | 'desc'
+  page?: number
+  size?: number
+}
+
+export const getMyOrders = (query: MyOrderQuery = {}) =>
+  http.get<never, Page<OrderVO>>('/order/list', { params: query })
 export const cancelOrder = (orderNo: string) => http.put(`/order/${orderNo}/cancel`)
 export const receiveOrder = (orderNo: string) => http.put(`/order/${orderNo}/receive`)
 

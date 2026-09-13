@@ -2,7 +2,10 @@ package com.mall.product.mapper;
 
 import com.mall.product.entity.MerchantShop;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
 
 /**
  * 只读查询商家店铺信息（读模型约定）。
@@ -17,4 +20,8 @@ public interface MerchantShopMapper {
     @Select("SELECT id, merchant_name, shop_name, shop_logo, shop_desc, shop_address, shop_status "
             + "FROM merchant WHERE id = #{id}")
     MerchantShop selectShopById(Long id);
+
+    /** 店铺名模糊匹配的商家 id（前台搜索"商品名 OR 店铺名"用） */
+    @Select("SELECT id FROM merchant WHERE shop_name LIKE CONCAT('%', #{keyword}, '%')")
+    List<Long> selectIdsByShopNameLike(@Param("keyword") String keyword);
 }

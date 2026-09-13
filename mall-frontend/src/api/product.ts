@@ -53,6 +53,8 @@ export interface ProductQuery {
   categoryId?: number | string
   merchantId?: number | string
   keyword?: string
+  /** 排序：sale=按销量倒序（首页热销推荐），省略=按上架时间倒序 */
+  sort?: 'sale'
 }
 
 /** 店铺信息（前台店铺页头部） */

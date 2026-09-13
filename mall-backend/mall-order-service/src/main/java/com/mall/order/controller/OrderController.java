@@ -27,12 +27,15 @@ public class OrderController {
         return Result.ok(orderService.create(userId, req));
     }
 
+    /** 我的订单：keyword 支持订单号/商品名模糊搜索，sort=asc|desc 按下单时间排序 */
     @GetMapping("/list")
     public Result<Page<OrderVO>> list(@RequestHeader(MallConstants.HEADER_USER_ID) Long userId,
                                       @RequestParam(required = false) Integer status,
+                                      @RequestParam(required = false) String keyword,
+                                      @RequestParam(defaultValue = "desc") String sort,
                                       @RequestParam(defaultValue = "1") int page,
                                       @RequestParam(defaultValue = "10") int size) {
-        return Result.ok(orderService.pageByUser(userId, status, page, size));
+        return Result.ok(orderService.pageByUser(userId, status, keyword, sort, page, size));
     }
 
     @GetMapping("/{orderNo}")

@@ -10,11 +10,11 @@ export interface Category {
   status: number
 }
 
+/** 首页轮播广告位（纯展示，无跳转链接） */
 export interface Advert {
   id: number
   title: string
   imgUrl: string
-  linkUrl?: string
   sort: number
   status: number
 }

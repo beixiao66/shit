@@ -40,7 +40,7 @@ async function mockCallback(success: boolean) {
 /** 真实应支付金额（订单快照），金额核对非空即必须与支付单一致 */
 async function getAmount() {
   try {
-    const res = await getMyOrders(undefined, 1, 50)
+    const res = await getMyOrders({ page: 1, size: 50 })
     const o = res.records.find((r) => r.orderNo === orderNo.value)
     if (o) return Number(o.payAmount)
   } catch {

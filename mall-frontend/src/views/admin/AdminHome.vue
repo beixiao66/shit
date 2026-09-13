@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { getDashboard, type Dashboard } from '@/api/report'
 import { useUserStore } from '@/stores/user'
@@ -8,22 +8,44 @@ const userStore = useUserStore()
 const $chart = ref<HTMLDivElement>()
 let chart: echarts.ECharts | null = null
 const data = ref<Dashboard | null>(null)
+/** 近 7 日是否有营收数据（无数据时图表下方给出口径提示） */
+const hasTrend = ref(false)
 
 async function load() {
   // 商家看本店口径（传自己的 merchantId），管理员看全平台
   const merchantId = userStore.type === 2 ? userStore.id : undefined
   data.value = await getDashboard(merchantId)
+  // 等 v-if="data" 内的图表容器挂载后再初始化 ECharts；否则 $chart 为 null，图表不渲染
+  await nextTick()
   renderChart()
+}
+
+/** 近 7 天日期（含今天，YYYY-MM-DD）：SQL 只返回有订单的日期，前端补零成连续 7 天 */
+function last7Days(): string[] {
+  const days: string[] = []
+  const today = new Date()
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(today.getDate() - i)
+    days.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+    )
+  }
+  return days
 }
 
 function renderChart() {
   if (!$chart.value || !data.value) return
   chart ??= echarts.init($chart.value)
   const trend = data.value.dailyTrend ?? []
+  const amountByDay = new Map(trend.map((t) => [t.day, Number(t.amount)]))
+  const days = last7Days()
+  const amounts = days.map((d) => amountByDay.get(d) ?? 0)
+  hasTrend.value = amounts.some((v) => v > 0)
   chart.setOption({
     grid: { left: 10, right: 10, top: 30, bottom: 10, containLabel: true },
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: trend.map((t) => t.day), axisLine: { lineStyle: { color: '#c9d2e0' } } },
+    xAxis: { type: 'category', data: days, axisLine: { lineStyle: { color: '#c9d2e0' } } },
     yAxis: { type: 'value', splitLine: { lineStyle: { color: '#eef1f6' } } },
     series: [
       {
@@ -31,7 +53,7 @@ function renderChart() {
         type: 'line',
         smooth: true,
         symbolSize: 6,
-        data: trend.map((t) => Number(t.amount)),
+        data: amounts,
         itemStyle: { color: '#e8b04b' },
         lineStyle: { color: '#e8b04b', width: 2.5 },
         areaStyle: { color: 'rgba(232, 176, 75, 0.12)' },
@@ -82,6 +104,9 @@ onBeforeUnmount(() => {
       <div class="panel chart-panel">
         <p class="panel-title">近 7 日营收趋势</p>
         <div ref="$chart" class="chart" />
+        <p v-if="!hasTrend" class="chart-empty">
+          近 7 日暂无营收数据 —— 营收按下单时间统计"已支付 / 已发货 / 已收货"订单，待支付与已退款订单不计入
+        </p>
       </div>
 
       <div v-if="data.merchantStats" class="cards sub">
@@ -157,6 +182,12 @@ onBeforeUnmount(() => {
 }
 .chart {
   height: 300px;
+}
+.chart-empty {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--md-color-ink-sub);
 }
 .cards.sub {
   margin-top: 16px;

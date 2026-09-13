@@ -33,17 +33,29 @@ public class ProductService {
     private final SkuMapper skuMapper;
     private final MerchantShopMapper merchantShopMapper;
 
-    /** 前台分页列表：商品 + 最低价 + 店铺名 */
+    /** 前台分页列表：商品 + 最低价 + 店铺名；keyword 同时匹配商品名与店铺名 */
     public Page<ProductVO> page(ProductQuery q) {
-        Page<Product> page = productMapper.selectPage(
-                new Page<>(q.getPage(), q.getSize()),
-                new LambdaQueryWrapper<Product>()
-                        .eq(q.getCategoryId() != null, Product::getCategoryId, q.getCategoryId())
-                        .eq(q.getMerchantId() != null, Product::getMerchantId, q.getMerchantId())
-                        .eq(Product::getStatus, 0)
-                        .and(q.getKeyword() != null && !q.getKeyword().isBlank(),
-                                w -> w.like(Product::getTitle, q.getKeyword()))
-                        .orderByDesc(Product::getCreateTime));
+        String keyword = q.getKeyword() == null ? null : q.getKeyword().trim();
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
+        // 店铺名命中的商家 id：keyword 为"商品名 OR 店铺名"口径
+        List<Long> shopIds = hasKeyword ? merchantShopMapper.selectIdsByShopNameLike(keyword) : List.of();
+        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
+                .eq(q.getCategoryId() != null, Product::getCategoryId, q.getCategoryId())
+                .eq(q.getMerchantId() != null, Product::getMerchantId, q.getMerchantId())
+                .eq(Product::getStatus, 0)
+                .and(hasKeyword, w -> {
+                    w.like(Product::getTitle, keyword);
+                    if (!shopIds.isEmpty()) {
+                        w.or().in(Product::getMerchantId, shopIds);
+                    }
+                });
+        // 热销推荐按销量倒序（同销量再按上架时间），其余按上架时间倒序
+        if ("sale".equalsIgnoreCase(q.getSort())) {
+            wrapper.orderByDesc(Product::getSaleCount).orderByDesc(Product::getCreateTime);
+        } else {
+            wrapper.orderByDesc(Product::getCreateTime);
+        }
+        Page<Product> page = productMapper.selectPage(new Page<>(q.getPage(), q.getSize()), wrapper);
         List<ProductVO> vos = new ArrayList<>();
         if (!page.getRecords().isEmpty()) {
             Map<Long, BigDecimal> minPriceByProduct = minPriceMap(page.getRecords());

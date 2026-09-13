@@ -15,6 +15,9 @@ public class ProductQuery {
     /** 按商家（店铺）筛选 */
     private Long merchantId;
 
-    /** 关键字：LIKE 商品名（演示不引入 ES，解答口径见数据库文档） */
+    /** 关键字：LIKE 商品名 / 店铺名（演示不引入 ES，解答口径见数据库文档） */
     private String keyword;
+
+    /** 排序：sale=按销量倒序（首页热销推荐），其余/空=按上架时间倒序 */
+    private String sort;
 }
