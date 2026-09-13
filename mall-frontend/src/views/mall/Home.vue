@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { CircleCheck, RefreshLeft, Service, Top, Van } from '@element-plus/icons-vue'
 import { getAdverts, getCategories, type Advert, type Category } from '@/api/catalog'
-import { getProductList, type Product } from '@/api/product'
+import { getProductList, searchShops, type Product, type ShopInfo } from '@/api/product'
 import { getCart } from '@/api/cart'
 import { useUserStore } from '@/stores/user'
 
@@ -15,6 +15,8 @@ const adverts = ref<Advert[]>([])
 const products = ref<Product[]>([])
 /** 热销推荐（按销量倒序取前 8） */
 const hotProducts = ref<Product[]>([])
+/** 相关店铺（搜索时按店铺名匹配，可直接进店） */
+const shops = ref<ShopInfo[]>([])
 const total = ref(0)
 const loading = ref(false)
 const activeCategory = ref<number>()
@@ -137,7 +139,22 @@ function onSearch() {
   activeCategory.value = undefined
   currentPage.value = 1
   loadProducts()
+  loadShops()
   document.querySelector('.grid')?.scrollIntoView({ behavior: 'smooth' })
+}
+
+/** 相关店铺：搜索词命中店铺名时展示，点击直接进店；未搜索/无命中则不展示 */
+async function loadShops() {
+  const kw = keyword.value.trim()
+  if (!kw) {
+    shops.value = []
+    return
+  }
+  try {
+    shops.value = await searchShops(kw)
+  } catch {
+    shops.value = []
+  }
 }
 
 function onPageChange(p: number) {
@@ -255,7 +272,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section v-if="hotProducts.length" class="hot">
+    <section v-if="hotProducts.length && !keyword.trim()" class="hot">
       <div class="section-head">
         <h2 class="section-title">热销好物</h2>
         <span class="section-sub">按销量排序</span>
@@ -277,8 +294,28 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
+    <section v-if="shops.length" class="shop-hits">
+      <div class="section-head">
+        <h2 class="section-title">相关店铺</h2>
+        <span class="section-sub">点击进店查看该店全部商品</span>
+      </div>
+      <div class="shop-hit-grid">
+        <router-link v-for="s in shops" :key="s.merchantId" class="shop-hit" :to="`/shop/${s.merchantId}`">
+          <span class="shop-hit-logo">
+            <img v-if="s.shopLogo" :src="s.shopLogo" :alt="s.shopName" />
+            <span v-else class="shop-hit-fallback">MX</span>
+          </span>
+          <span class="shop-hit-info">
+            <span class="shop-hit-name">{{ s.shopName }}</span>
+            <span class="shop-hit-desc">{{ s.shopDesc || '暂无店铺简介' }}</span>
+          </span>
+          <span class="shop-hit-enter">进店 ›</span>
+        </router-link>
+      </div>
+    </section>
+
     <div class="section-head all-head">
-      <h2 class="section-title">全部商品</h2>
+      <h2 class="section-title">{{ keyword.trim() ? `「${keyword.trim()}」的搜索结果` : '全部商品' }}</h2>
     </div>
 
     <section v-loading="loading" class="grid">
@@ -591,6 +628,82 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
   gap: 16px;
+}
+
+/* 相关店铺（搜索结果直达店铺页） */
+.shop-hits {
+  margin-top: 26px;
+}
+.shop-hit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.shop-hit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--mx-line);
+  border-radius: 10px;
+  background: #fff;
+  transition: all 0.15s ease;
+}
+.shop-hit:hover {
+  border-color: var(--mx-red);
+  box-shadow: 0 4px 14px rgba(29, 33, 41, 0.08);
+}
+.shop-hit-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--mx-bg-2);
+}
+.shop-hit-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.shop-hit-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--mx-red);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+}
+.shop-hit-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.shop-hit-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.shop-hit-desc {
+  font-size: 12px;
+  color: var(--mx-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shop-hit-enter {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--mx-red);
+  white-space: nowrap;
 }
 
 /* 商品网格 5 列 */

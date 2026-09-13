@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -47,6 +48,13 @@ public class PortalProductController {
     @GetMapping("/products/{id}")
     public Result<ProductDetailVO> detail(@PathVariable Long id) {
         return Result.ok(productService.detail(id));
+    }
+
+    /** 搜索店铺：按店铺名模糊匹配，供前台"相关店铺"直接进店 */
+    @GetMapping("/shops")
+    public Result<List<ShopVO>> shops(@RequestParam String keyword,
+                                      @RequestParam(defaultValue = "6") int limit) {
+        return Result.ok(productService.searchShops(keyword, limit));
     }
 
     @GetMapping("/shops/{merchantId}")

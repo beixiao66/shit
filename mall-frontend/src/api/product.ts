@@ -73,6 +73,9 @@ export const getProductList = (query: ProductQuery = {}) =>
 export const getProductDetail = (id: number | string) => http.get<never, ProductDetail>(`/portal/products/${id}`)
 export const getShopInfo = (merchantId: number | string) =>
   http.get<never, ShopInfo>(`/portal/shops/${merchantId}`)
+/** 搜索店铺（前台搜索框：直接进店用） */
+export const searchShops = (keyword: string, limit = 6) =>
+  http.get<never, ShopInfo[]>('/portal/shops', { params: { keyword, limit } })
 
 // 商家管理（商品管理页面）
 export const getMyProducts = (page = 1, size = 10) =>

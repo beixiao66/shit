@@ -151,11 +151,141 @@ def backpack(d):
     rounded(d, (460, 640, 740, 760), 30, (238, 241, 247))
     rounded(d, (450, 320, 750, 600), 30, (238, 241, 247))
 
+# ---------- 扩充品类 ----------
+def laptop(d):
+    shadow(d, 600, 770, 280, ry=26)
+    d.polygon([(360, 240), (840, 240), (818, 620), (382, 620)], fill=WHITE, outline=INK)
+    d.polygon([(392, 272), (808, 272), (790, 590), (410, 590)], fill=(238, 241, 247))
+    d.polygon([(340, 620), (860, 620), (900, 700), (300, 700)], fill=WHITE, outline=INK)
+    rounded(d, (556, 648, 644, 672), 10, DARK)
+
+def tablet(d):
+    shadow(d, 600, 760, 200)
+    rounded(d, (400, 170, 800, 740), 40, WHITE, INK, 5)
+    rounded(d, (432, 202, 768, 690), 28, (238, 241, 247))
+    d.ellipse((586, 700, 614, 728), fill=(210, 214, 224))
+
+def camera(d):
+    shadow(d, 600, 740, 240)
+    rounded(d, (330, 300, 870, 690), 40, WHITE, INK, 5)
+    d.ellipse((470, 350, 730, 610), fill=(238, 241, 247), outline=INK, width=5)
+    d.ellipse((532, 412, 668, 548), fill=(214, 219, 230))
+    rounded(d, (620, 244, 764, 308), 16, WHITE, INK, 5)
+    d.ellipse((824, 346, 856, 378), fill=DARK)
+
+def powerbank(d):
+    shadow(d, 600, 760, 180)
+    rounded(d, (452, 220, 748, 740), 30, WHITE, INK, 5)
+    for y in (300, 372, 444):
+        rounded(d, (504, y, 696, y + 38), 10, (228, 232, 240))
+    rounded(d, (504, 620, 696, 662), 12, (200, 205, 216))
+
+def mouse(d):
+    shadow(d, 600, 740, 190)
+    d.ellipse((440, 220, 760, 700), fill=WHITE, outline=INK, width=5)
+    d.line((600, 226, 600, 456), fill=DARK, width=6)
+    rounded(d, (580, 262, 620, 344), 16, (228, 232, 240))
+
+def monitor(d):
+    shadow(d, 600, 780, 300, ry=26)
+    rounded(d, (280, 190, 920, 640), 24, WHITE, INK, 5)
+    rounded(d, (312, 222, 888, 608), 16, (238, 241, 247))
+    rounded(d, (552, 640, 648, 730), 14, WHITE, INK, 4)
+    rounded(d, (430, 730, 770, 776), 22, WHITE, INK, 4)
+
+def ricecooker(d):
+    shadow(d, 600, 750, 230)
+    rounded(d, (400, 330, 800, 724), 50, WHITE, INK, 5)
+    rounded(d, (368, 250, 832, 364), 40, WHITE, INK, 5)
+    d.ellipse((556, 186, 644, 262), fill=(238, 241, 247), outline=INK, width=4)
+    rounded(d, (452, 604, 748, 664), 20, (238, 241, 247))
+
+def microwave(d):
+    shadow(d, 600, 750, 280)
+    rounded(d, (300, 258, 900, 704), 30, WHITE, INK, 5)
+    rounded(d, (338, 296, 676, 664), 20, (238, 241, 247))
+    d.ellipse((430, 400, 590, 560), fill=(214, 219, 230))
+    for y in (348, 418, 488, 558, 628):
+        d.ellipse((726, y, 758, y + 30), fill=(228, 232, 240))
+
+def washer(d):
+    shadow(d, 600, 762, 270)
+    rounded(d, (340, 196, 860, 744), 30, WHITE, INK, 5)
+    d.ellipse((452, 330, 748, 626), fill=(238, 241, 247), outline=INK, width=5)
+    d.ellipse((512, 390, 688, 566), fill=(214, 219, 230))
+    for x in (416, 476, 536):
+        d.ellipse((x, 236, x + 30, 266), fill=(228, 232, 240))
+
+def fan(d):
+    shadow(d, 600, 772, 200)
+    d.ellipse((420, 150, 780, 510), fill=WHITE, outline=INK, width=5)
+    d.ellipse((470, 200, 730, 460), fill=(238, 241, 247))
+    for cx, cy in ((555, 285), (665, 285), (610, 385)):
+        d.ellipse((cx - 46, cy - 34, cx + 46, cy + 34), fill=(224, 228, 238))
+    rounded(d, (572, 510, 628, 716), 24, WHITE, INK, 4)
+    rounded(d, (474, 716, 726, 770), 24, WHITE, INK, 4)
+
+def kettle(d):
+    shadow(d, 600, 760, 190)
+    rounded(d, (440, 296, 760, 728), 60, WHITE, INK, 5)
+    d.arc((696, 296, 892, 520), 270, 90, fill=INK, width=16)
+    rounded(d, (418, 236, 782, 320), 32, WHITE, INK, 5)
+    rounded(d, (478, 728, 722, 772), 16, DARK)
+
+def sneaker(d):
+    shadow(d, 600, 748, 300, ry=30)
+    d.polygon([(300, 556), (424, 396), (566, 376), (764, 468), (900, 556), (900, 664), (300, 664)],
+              fill=WHITE, outline=INK)
+    d.line((302, 620, 898, 620), fill=DARK, width=8)
+    d.arc((420, 396, 620, 516), 180, 360, fill=DARK, width=6)
+    d.line((520, 430, 600, 470), fill=(228, 232, 240), width=10)
+
+def jeans(d):
+    shadow(d, 600, 772, 240)
+    d.polygon([(470, 176), (730, 176), (762, 764), (638, 764), (600, 486), (562, 764), (438, 764)],
+              fill=WHITE, outline=INK)
+    d.line((470, 258, 730, 258), fill=DARK, width=6)
+    d.ellipse((584, 232, 616, 264), fill=(228, 232, 240))
+
+def shirt(d):
+    shadow(d, 600, 762, 250)
+    d.polygon([(600, 190), (718, 158), (858, 250), (798, 452), (740, 412), (740, 764), (460, 764),
+               (460, 412), (402, 452), (342, 250), (482, 158)], fill=WHITE, outline=INK)
+    d.polygon([(556, 168), (600, 268), (644, 168)], fill=(238, 241, 247), outline=DARK)
+    d.line((600, 286, 600, 700), fill=(228, 232, 240), width=5)
+    for y in (330, 420):
+        d.ellipse((584, y, 616, y + 32), fill=(228, 232, 240))
+
+def dress(d):
+    shadow(d, 600, 772, 284)
+    d.polygon([(536, 168), (664, 168), (694, 382), (836, 764), (364, 764), (506, 382)], fill=WHITE, outline=INK)
+    d.arc((528, 148, 672, 292), 0, 180, fill=DARK, width=8)
+    d.line((600, 420, 600, 720), fill=(238, 241, 247), width=6)
+    d.line((508, 470, 692, 470), fill=(238, 241, 247), width=6)
+
+def handbag(d):
+    shadow(d, 600, 752, 230)
+    rounded(d, (400, 376, 800, 732), 30, WHITE, INK, 5)
+    d.arc((500, 236, 700, 456), 180, 360, fill=INK, width=16)
+    rounded(d, (556, 418, 644, 470), 14, (228, 232, 240))
+    d.line((400, 520, 800, 520), fill=(238, 241, 247), width=6)
+
+def cup(d):
+    shadow(d, 600, 752, 150)
+    rounded(d, (490, 198, 710, 724), 40, WHITE, INK, 5)
+    rounded(d, (468, 176, 732, 282), 30, WHITE, INK, 5)
+    rounded(d, (520, 330, 680, 604), 24, (238, 241, 247))
+
 PRODUCTS = [
     ("phone", phone), ("earphone", earphone), ("tshirt", tshirt),
     ("watch", watch), ("charger", charger), ("speaker", speaker),
     ("keyboard", keyboard), ("cap", cap), ("scarf", scarf),
     ("hoodie", hoodie), ("slipper", slipper), ("backpack", backpack),
+    # --- 扩充品类（100 条种子数据用）---
+    ("laptop", laptop), ("tablet", tablet), ("camera", camera), ("powerbank", powerbank),
+    ("mouse", mouse), ("monitor", monitor), ("ricecooker", ricecooker), ("microwave", microwave),
+    ("washer", washer), ("fan", fan), ("kettle", kettle), ("sneaker", sneaker),
+    ("jeans", jeans), ("shirt", shirt), ("dress", dress), ("handbag", handbag),
 ]
 
 for name, fn in PRODUCTS:

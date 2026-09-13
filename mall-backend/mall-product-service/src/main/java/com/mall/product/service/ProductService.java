@@ -223,6 +223,25 @@ public class ProductService {
         return name == null ? "" : name;
     }
 
+    /** 前台搜索店铺：按店铺名模糊匹配，返回可点击进店的店铺列表（不传关键字返回空） */
+    public List<ShopVO> searchShops(String keyword, int limit) {
+        if (keyword == null || keyword.isBlank()) {
+            return List.of();
+        }
+        return merchantShopMapper.selectByShopNameLike(keyword.trim(), limit).stream().map(m -> {
+            ShopVO vo = new ShopVO();
+            vo.setMerchantId(m.getId());
+            String name = (m.getShopName() != null && !m.getShopName().isBlank())
+                    ? m.getShopName() : m.getMerchantName();
+            vo.setShopName(name == null ? "" : name);
+            vo.setShopLogo(m.getShopLogo());
+            vo.setShopDesc(m.getShopDesc());
+            vo.setShopAddress(m.getShopAddress());
+            vo.setShopStatus(m.getShopStatus());
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
     /** 店铺信息（前台店铺页头部） */
     public ShopVO shop(Long merchantId) {
         MerchantShop m = merchantShopMapper.selectShopById(merchantId);
