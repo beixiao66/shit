@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { CircleCheck, RefreshLeft, Service, Top, Van } from '@element-plus/icons-vue'
@@ -128,10 +128,17 @@ async function loadProducts() {
   }
 }
 
+/** 当前选中类目名（用于结果区标题，让"点类目 -> 看该分类商品"有明确反馈） */
+const activeCategoryName = computed(
+  () => categories.value.find((c) => String(c.id) === String(activeCategory.value))?.name,
+)
+
+/** 类目筛选：滚到结果区（结果区在轮播图下方，不滚动会像"没反应"） */
 function pickCategory(id?: number | string) {
   activeCategory.value = id ? Number(id) : undefined
   currentPage.value = 1
   loadProducts()
+  document.querySelector('.grid')?.scrollIntoView({ behavior: 'smooth' })
 }
 
 /** 搜索商品名/店铺名：重置类目与页码并滚到结果区（结果区在轮播图下方，不滚动会像"没反应"） */
@@ -315,7 +322,9 @@ onBeforeUnmount(() => {
     </section>
 
     <div class="section-head all-head">
-      <h2 class="section-title">{{ keyword.trim() ? `「${keyword.trim()}」的搜索结果` : '全部商品' }}</h2>
+      <h2 class="section-title">
+        {{ keyword.trim() ? `「${keyword.trim()}」的搜索结果` : activeCategoryName ? `${activeCategoryName} · 全部商品` : '全部商品' }}
+      </h2>
     </div>
 
     <section v-loading="loading" class="grid">
