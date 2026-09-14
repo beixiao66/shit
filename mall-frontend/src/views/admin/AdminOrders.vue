@@ -28,7 +28,8 @@ const list = ref<OrderVO[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
-const status = ref<number | undefined>(undefined)
+/** 状态筛选：null 表示"全部"（发送时省略该参数，后端 status 为 Integer） */
+const status = ref<number | null>(null)
 /** 搜索关键字：订单号 / 收货人 / 商品名 */
 const keyword = ref('')
 const shipDialog = ref(false)
@@ -37,7 +38,7 @@ const ship = reactive({ logisticsCompany: '', trackingNo: '' })
 
 async function load() {
   const query = {
-    status: status.value,
+    status: status.value ?? undefined,
     keyword: keyword.value.trim() || undefined,
     page: page.value,
     size: pageSize.value,
@@ -99,7 +100,7 @@ onMounted(load)
           @clear="onSearch"
         />
         <el-select v-model="status" style="width: 140px" @change="page = 1; load()">
-          <el-option v-for="s in STATUS_OPTIONS" :key="s.label" :label="s.label" :value="s.value ?? 'all'" />
+          <el-option v-for="s in STATUS_OPTIONS" :key="s.label" :label="s.label" :value="s.value ?? null" />
         </el-select>
       </div>
     </div>

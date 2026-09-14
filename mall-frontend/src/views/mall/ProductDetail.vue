@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getProductDetail, getProductList, type Product, type Sku } from '@/api/product'
@@ -237,6 +237,16 @@ async function submitBuy() {
 }
 
 onMounted(load)
+
+/** 同一路由组件复用：从"猜你喜欢"跳到另一个商品时 route.params.id 变化但组件不会重建，
+ *  必须监听参数变化手动重载，否则只有 URL 变、页面内容不变（看起来"点了没反应"）。 */
+watch(
+  () => route.params.id,
+  () => {
+    window.scrollTo({ top: 0 })
+    load()
+  },
+)
 </script>
 
 <template>
