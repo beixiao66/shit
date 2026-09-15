@@ -5,26 +5,30 @@
 ## 1. 系统拓扑
 
 ```
-                       ┌─────────────────────────────────────────────┐
-   浏览器 (Vue3 Web)   │             192.168.193.131 (Docker)          │
-  ┌──────────────┐     │  Nacos(8848) Redis(6379) RocketMQ(9876/10911)│
-  │ 商城前台 /   │     │  Sentinel Dash(8858)                          │
-  │ 管理后台      │─────┤                       ┌──────────────┐        │
-  └──────────────┘     │  ┌── mall-gateway 8090 │             │        │
-       :5173 dev       │  │  路由/JWT鉴权/限流    │  MySQL localhost      │
-       代理 /api→8090  │  └──┬────────────────┘  │  mall_x(13表)  │      │
-                       │     ├─ mall-auth-service 8010                │
-                       │     ├─ mall-user-service  8011                │
-                       │     ├─ mall-merchant-service 8012             │
-                       │     ├─ mall-product-service 8013              │
-                       │     ├─ mall-order-service  8014               │
-                       │     ├─ mall-pay-service    8015               │
-                       │     └─ mall-report-service 8016               │
-                       └─────────────────────────────────────────────┘
+                        ┌─────────────────────────────────────────────┐
+   浏览器 (Vue3 Web)     │          中间件主机（默认 192.168.193.131）      │
+  ┌──────────────┐      │  Nacos(8848) Redis(6379) RocketMQ(9876/10911)│
+  │ 商城前台 /   │      │  Sentinel Dash(8858)  RocketMQ Dash(8180)     │
+  │ 管理后台      │──────┼──┌── mall-gateway 8090 ──────┐               │
+  └──────────────┘      │  │  路由/JWT鉴权/限流          │               │
+       :5173 dev        │  └──┬────────────────────────┘               │
+       代理 /api→8090   │     ├─ mall-auth-service 8010  ──┐            │
+                        │     ├─ mall-user-service  8011   │            │
+                        │     ├─ mall-merchant-service 8012│            │
+                        │     ├─ mall-product-service 8013 │            │
+                        │     ├─ mall-order-service  8014  │            │
+                        │     ├─ mall-pay-service    8015  │            │
+                        │     └─ mall-report-service 8016  │            │
+                        └─────────────────────────────────┼────────────┘
+                                                          │ 同库直连(演示约定)
+                                              ┌───────────▼───────────┐
+                                              │ MySQL localhost:3306  │
+                                              │ mall_x（13 表）        │
+                                              └───────────────────────┘
 ```
 
-- 全服务注册 Nacos（192.168.193.131），网关服务发现负载（lb://）
-- 中间件容器化（docker/docker-compose.yml）；MySQL 留 localhost（演示约定）
+- 全部 8 个服务注册 Nacos（默认 192.168.193.131，换环境时全局替换该 IP），网关服务发现负载（lb://）
+- 中间件容器化（docker/docker-compose.yml）；**MySQL 与 MinIO 留在宿主机/localhost（演示约定，不入 compose）**，图中 MySQL 单独画出
 - mall-common 为公共库（BaseDO/BaseLogicDO、Result、全局异常、JwtUtil、常量），非独立微服务
 
 ## 2. 服务职责边界
