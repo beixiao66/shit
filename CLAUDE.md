@@ -124,16 +124,13 @@
 ## 项目目录结构规划
 
 ```
-mall-x/
+狗屎/
 ├── mall-frontend/          # Web 前端（商城前台 + 管理后台，Vue3+TS）
 │   ├── src/views/mall/     #   商城前台页面
-│   ├── src/views/admin/    #   管理后台页面（Admin*/Merchant* 前缀区分平台与商家功能）
-│   ├── src/layouts/        #   MallLayout 布局
-│   ├── src/router/         #   路由（/ 与 /admin 双空间 + 守卫）
-│   ├── src/stores/         #   Pinia：user
-│   ├── src/api/            #   Axios 接口层（http.ts 含 token 拦截与 json-bigint 解析）
-│   ├── src/components/     #   通用组件（ImageUpload 图片上传）
-│   └── src/styles/         #   tokens.css / base.css
+│   ├── src/views/admin/    #   管理后台页面（admin/platform、admin/merchant）
+│   ├── src/stores/         #   Pinia：user / cart
+│   ├── src/api/            #   Axios 接口层
+│   └── src/utils/          #   请求封装、token、本地购物车
 ├── mall-backend/           # SpringCloudAlibaba 微服务
 │   ├── mall-gateway/
 │   ├── mall-auth-service/
@@ -143,8 +140,7 @@ mall-x/
 │   ├── mall-order-service/
 │   ├── mall-pay-service/
 │   ├── mall-report-service/
-│   └── mall-common/        # 公共模块（响应体、异常、JWT、常量）
-├── scripts/                # 辅助脚本（种子/图片生成、冒烟与走查）
+│   └── mall-common/        # 公共模块（响应体、异常、幂等、分布式锁）
 ├── docs/                   # 分目录：需求文档 / 数据库设计 / 架构图 / 初始模块建立草图 / 改良计划 + init.sql
-└── docker/                 # Docker Compose：nacos / redis / rocketmq(+dashboard) / sentinel-dashboard
+└── docker/                 # Docker Compose：nacos / redis-cluster / rocketmq
 ```
