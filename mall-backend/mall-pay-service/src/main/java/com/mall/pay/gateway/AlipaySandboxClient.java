@@ -38,22 +38,50 @@ public class AlipaySandboxClient implements AlipayGatewayClient {
 
     private final AlipayProperties props;
     private final AlipayClient client;
+    /** 归一化后的支付宝公钥（验签用；SDK 不接受 PEM/多行格式） */
+    private final String normalizedAlipayPublicKey;
+    private final String normalizedCharset;
+    private final String normalizedSignType;
 
     /** 从返回的表单 HTML 里抠出支付宝网关地址（action="..."） */
     private static final Pattern FORM_ACTION = Pattern.compile("action=\"([^\"]+)\"");
 
     public AlipaySandboxClient(AlipayProperties props) {
         this.props = props;
+        // 密钥归一化：支付宝密钥生成工具导出的是 PEM（多行 + 头尾标记），
+        // 而 alipay-sdk 的 AlipaySignature 只接受单行 Base64（带换行/头尾会导致验签静默失败）。
+        // 实测确认：直接粘贴 PEM 会验签失败，故此处统一剥掉头尾与所有空白字符。
+        String privateKey = normalizeKey(props.getPrivateKey());
+        String publicKey = normalizeKey(props.getAlipayPublicKey());
+        this.normalizedAlipayPublicKey = publicKey;
+        this.normalizedCharset = props.getCharset();
+        this.normalizedSignType = props.getSignType();
         this.client = new DefaultAlipayClient(
                 props.getGatewayUrl(),
                 props.getAppId(),
-                props.getPrivateKey(),
+                privateKey,
                 "json",
                 props.getCharset(),
-                props.getAlipayPublicKey(),
+                publicKey,
                 props.getSignType());
         log.info("[ALIPAY] 沙箱渠道已启用: appId={}, gateway={}, notifyUrl={}",
                 props.getAppId(), props.getGatewayUrl(), props.resolveNotifyUrl());
+        if (!privateKey.equals(props.getPrivateKey()) || !publicKey.equals(props.getAlipayPublicKey())) {
+            log.info("[ALIPAY] 检测到 PEM 格式密钥，已自动归一化为单行 Base64");
+        }
+    }
+
+    /**
+     * 把 PEM / 带换行的密钥归一化成 SDK 要求的单行 Base64。
+     * 已经是单行 Base64 时原样返回。
+     */
+    static String normalizeKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        return key.replaceAll("-----BEGIN [A-Z ]+-----", "")
+                .replaceAll("-----END [A-Z ]+-----", "")
+                .replaceAll("\\s", "");
     }
 
     @Override
@@ -140,8 +168,9 @@ public class AlipaySandboxClient implements AlipayGatewayClient {
      */
     public boolean verifyNotify(Map<String, String> params) {
         try {
-            return AlipaySignature.rsaCheckV1(params, props.getAlipayPublicKey(),
-                    props.getCharset(), props.getSignType());
+            // 必须用归一化后的公钥：SDK 不接受 PEM / 多行格式，否则验签静默失败
+            return AlipaySignature.rsaCheckV1(params, normalizedAlipayPublicKey,
+                    normalizedCharset, normalizedSignType);
         } catch (AlipayApiException e) {
             log.warn("[ALIPAY] 验签异常: {}", e.getMessage());
             return false;

@@ -110,6 +110,43 @@ class AlipaySandboxClientTest {
         assertThat(client.isRealChannel()).isTrue();
     }
 
+    /**
+     * 回归测试：支付宝密钥生成工具导出的是 PEM（多行 + BEGIN/END 标记），
+     * 而 SDK 的 AlipaySignature 只接受单行 Base64 —— 直接粘贴 PEM 会导致验签静默失败
+     * （实测确认）。客户端构造函数必须做归一化。
+     */
+    @Test
+    void verifyNotify_pemFormattedKeys_areNormalizedAndPass() throws Exception {
+        AlipayProperties props = new AlipayProperties();
+        props.setEnabled(true);
+        props.setAppId("2021000000000000");
+        // 模拟用户直接粘贴密钥工具的导出内容
+        props.setPrivateKey(pem("PRIVATE KEY", privateKey));
+        props.setAlipayPublicKey(pem("PUBLIC KEY", publicKey));
+        AlipaySandboxClient client = new AlipaySandboxClient(props);
+
+        // 用原始单行私钥签名，用 PEM 公钥（已在客户端内归一化）验签
+        assertThat(client.verifyNotify(signedNotify())).isTrue();
+    }
+
+    @Test
+    void normalizeKey_stripsPemHeadersAndWhitespace() {
+        assertThat(AlipaySandboxClient.normalizeKey(pem("PUBLIC KEY", publicKey))).isEqualTo(publicKey);
+        assertThat(AlipaySandboxClient.normalizeKey("  " + publicKey + "\n")).isEqualTo(publicKey);
+        // 已经是单行 Base64 时保持原样
+        assertThat(AlipaySandboxClient.normalizeKey(publicKey)).isEqualTo(publicKey);
+        assertThat(AlipaySandboxClient.normalizeKey(null)).isNull();
+    }
+
+    /** 按密钥工具导出的样式格式化：PEM 头尾 + 每 64 字符换行 */
+    private static String pem(String label, String base64) {
+        StringBuilder sb = new StringBuilder("-----BEGIN ").append(label).append("-----\n");
+        for (int i = 0; i < base64.length(); i += 64) {
+            sb.append(base64, i, Math.min(i + 64, base64.length())).append('\n');
+        }
+        return sb.append("-----END ").append(label).append("-----").toString();
+    }
+
     @Test
     void properties_configuredAndEffective_onlyWhenAllKeysPresent() {
         AlipayProperties props = new AlipayProperties();
