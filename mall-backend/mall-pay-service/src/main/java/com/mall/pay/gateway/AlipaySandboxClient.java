@@ -179,7 +179,13 @@ public class AlipaySandboxClient implements AlipayGatewayClient {
 
     // -----------------------------------------------------
 
-    /** 生成支付宝网关跳转 URL（把 SDK 返回的表单 action 抽出来，便于前端 window.open） */
+    /**
+     * 生成支付宝网关跳转 URL（把 SDK 返回的表单 action 抽出来，便于前端 window.open）。
+     *
+     * <p>注意：SDK 返回的是 <b>HTML 表单</b>，action 里的 URL 参数分隔符是 HTML 转义过的
+     * {@code &amp;}，必须反转义成 {@code &}，否则支付宝会把 {@code &amp;method=...} 当成
+     * 一个参数名，直接返回 404（实测踩过）。
+     */
     private String buildGatewayUrl(AlipayTradePagePayRequest req) {
         try {
             String form = client.pageExecute(req).getBody();
@@ -188,7 +194,7 @@ public class AlipaySandboxClient implements AlipayGatewayClient {
             }
             Matcher m = FORM_ACTION.matcher(form);
             if (m.find()) {
-                return m.group(1);
+                return htmlUnescape(m.group(1));
             }
             // 兜底：返回原始表单（前端可用 form 提交方式打开）
             log.warn("[ALIPAY] 未从表单中解析出 action，返回原始表单");
@@ -196,6 +202,18 @@ public class AlipaySandboxClient implements AlipayGatewayClient {
         } catch (AlipayApiException e) {
             throw new BizException("支付宝下单异常: " + e.getMessage());
         }
+    }
+
+    /** 反转义 HTML 实体：&amp; &lt; &gt; &quot; &#39; */
+    static String htmlUnescape(String s) {
+        if (s == null || s.indexOf('&') < 0) {
+            return s;
+        }
+        return s.replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
     }
 
     private static String escape(String s) {

@@ -138,6 +138,23 @@ class AlipaySandboxClientTest {
         assertThat(AlipaySandboxClient.normalizeKey(null)).isNull();
     }
 
+    /**
+     * 回归测试：SDK 返回的 HTML 表单里 action 参数分隔符是 {@code &amp;}，
+     * 不反转义会导致支付宝收到 {@code &amp;method=...} 当成参数名而返回 404（实测踩过）。
+     */
+    @Test
+    void htmlUnescape_convertsEntitiesInGatewayUrl() {
+        String escaped = "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+                + "?charset=UTF-8&amp;method=alipay.trade.page.pay&amp;sign=abc%3D%3D";
+        String unescaped = AlipaySandboxClient.htmlUnescape(escaped);
+        assertThat(unescaped).isEqualTo("https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+                + "?charset=UTF-8&method=alipay.trade.page.pay&sign=abc%3D%3D");
+        assertThat(unescaped).doesNotContain("&amp;");
+        // 无实体时原样返回；URL 编码的 %3D 等不能被误改
+        assertThat(AlipaySandboxClient.htmlUnescape("a=1&b=2%3D%3D")).isEqualTo("a=1&b=2%3D%3D");
+        assertThat(AlipaySandboxClient.htmlUnescape(null)).isNull();
+    }
+
     /** 按密钥工具导出的样式格式化：PEM 头尾 + 每 64 字符换行 */
     private static String pem(String label, String base64) {
         StringBuilder sb = new StringBuilder("-----BEGIN ").append(label).append("-----\n");
