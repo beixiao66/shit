@@ -7,6 +7,8 @@ import com.mall.common.BizException;
 import com.mall.pay.entity.PayInfo;
 import com.mall.pay.entity.Refund;
 import com.mall.pay.gateway.AlipayGatewayClient;
+import com.mall.pay.gateway.AlipaySandboxClient;
+import com.mall.pay.gateway.PayCreateResult;
 import com.mall.pay.mapper.OrderPayMapper;
 import com.mall.pay.mapper.PayInfoMapper;
 import com.mall.pay.mapper.RefundMapper;
@@ -17,17 +19,23 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.math.BigDecimal;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class PayServiceTest {
 
     @Mock private PayInfoMapper payInfoMapper;
@@ -36,6 +44,8 @@ class PayServiceTest {
     @Mock private AlipayGatewayClient alipayGatewayClient;
     @Mock private RedissonClient redissonClient;
     @Mock private RLock rLock;
+    /** 沙箱客户端是可选的（Mock 渠道下不存在），因此用 ObjectProvider 注入 */
+    @Mock private ObjectProvider<AlipaySandboxClient> sandboxProvider;
 
     @InjectMocks
     private PayService payService;
@@ -76,10 +86,12 @@ class PayServiceTest {
         order.setStatus(0); order.setPayAmount(new BigDecimal("100"));
         when(orderPayMapper.selectByOrderNo("ORD001")).thenReturn(order);
         PayInfo exist = new PayInfo();
-        exist.setPayNo("P_EXISTING"); exist.setStatus(0);
+        exist.setPayNo("P_EXISTING"); exist.setStatus(0); exist.setAmount(new BigDecimal("100"));
         when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(exist);
-        String payNo = payService.create(1001L, "ORD001");
-        assertThat(payNo).isEqualTo("P_EXISTING");
+        when(alipayGatewayClient.createPay(anyString(), anyString(), anyString(), any(BigDecimal.class)))
+                .thenReturn(voucher("P_EXISTING", "ORD001", false));
+        PayCreateResult result = payService.create(1001L, "ORD001");
+        assertThat(result.payNo()).isEqualTo("P_EXISTING");
         verify(payInfoMapper, never()).insert(any());
     }
 
@@ -90,12 +102,78 @@ class PayServiceTest {
         when(orderPayMapper.selectByOrderNo("ORD001")).thenReturn(order);
         when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
         when(payInfoMapper.insert(any(PayInfo.class))).thenReturn(1);
-        when(alipayGatewayClient.createPay(anyString(), anyString(), any(BigDecimal.class)))
-                .thenReturn("MOCK-URL");
-        String payNo = payService.create(1001L, "ORD001");
-        assertThat(payNo).startsWith("P");
+        when(alipayGatewayClient.createPay(anyString(), anyString(), anyString(), any(BigDecimal.class)))
+                .thenAnswer(inv -> voucher(inv.getArgument(0), inv.getArgument(1), true));
+        PayCreateResult result = payService.create(1001L, "ORD001");
+        assertThat(result.payNo()).startsWith("P");
+        assertThat(result.realChannel()).isTrue();
         verify(payInfoMapper).insert(any(PayInfo.class));
-        verify(alipayGatewayClient).createPay(anyString(), anyString(), any(BigDecimal.class));
+        verify(alipayGatewayClient).createPay(anyString(), anyString(), anyString(), any(BigDecimal.class));
+    }
+
+    // ----------------------------------------------------------
+    // 支付宝异步通知（沙箱渠道）
+    // ----------------------------------------------------------
+
+    @Test
+    void handleAlipayNotify_noSandboxChannel_returnsFalse() {
+        when(sandboxProvider.getIfAvailable()).thenReturn(null);
+        assertThat(payService.handleAlipayNotify(Map.of("out_trade_no", "P001"))).isFalse();
+    }
+
+    @Test
+    void handleAlipayNotify_badSignature_returnsFalse() {
+        AlipaySandboxClient sandbox = mock(AlipaySandboxClient.class);
+        when(sandboxProvider.getIfAvailable()).thenReturn(sandbox);
+        when(sandbox.verifyNotify(anyMap())).thenReturn(false);
+        assertThat(payService.handleAlipayNotify(notifyParams("TRADE_SUCCESS"))).isFalse();
+        // 验签失败绝不能入账
+        verify(payInfoMapper, never()).markSuccess(any(), any(), any());
+    }
+
+    @Test
+    void handleAlipayNotify_tradeNotSuccess_answersWithoutBooking() {
+        AlipaySandboxClient sandbox = mock(AlipaySandboxClient.class);
+        when(sandboxProvider.getIfAvailable()).thenReturn(sandbox);
+        when(sandbox.verifyNotify(anyMap())).thenReturn(true);
+        // 未付款状态：应答 success 但不入账
+        assertThat(payService.handleAlipayNotify(notifyParams("WAIT_BUYER_PAY"))).isTrue();
+        verify(payInfoMapper, never()).markSuccess(any(), any(), any());
+    }
+
+    @Test
+    void handleAlipayNotify_success_booksPayment() throws InterruptedException {
+        AlipaySandboxClient sandbox = mock(AlipaySandboxClient.class);
+        when(sandboxProvider.getIfAvailable()).thenReturn(sandbox);
+        when(sandbox.verifyNotify(anyMap())).thenReturn(true);
+        PayInfo pay = mockPayInfo(1L, 0);
+        pay.setOrderNo("ORD001");
+        pay.setAmount(new BigDecimal("100"));
+        when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(pay);
+        when(redissonClient.getLock("pay:notify:P001")).thenReturn(rLock);
+        when(rLock.tryLock(5, java.util.concurrent.TimeUnit.SECONDS)).thenReturn(true);
+        when(payInfoMapper.markSuccess(eq(1L), eq("TRADE001"), anyString())).thenReturn(1);
+        when(orderPayMapper.markPaid("ORD001")).thenReturn(1);
+        when(orderPayMapper.selectMerchantId("ORD001")).thenReturn(100L);
+        when(orderPayMapper.selectItems("ORD001")).thenReturn(Collections.emptyList());
+
+        assertThat(payService.handleAlipayNotify(notifyParams("TRADE_SUCCESS"))).isTrue();
+        verify(orderPayMapper).markPaid("ORD001");
+        verify(orderPayMapper).addMerchantBalance(eq(100L), any(BigDecimal.class));
+    }
+
+    @Test
+    void handleAlipayNotify_amountMismatch_rejectsAndReturnsFalse() {
+        AlipaySandboxClient sandbox = mock(AlipaySandboxClient.class);
+        when(sandboxProvider.getIfAvailable()).thenReturn(sandbox);
+        when(sandbox.verifyNotify(anyMap())).thenReturn(true);
+        PayInfo pay = mockPayInfo(1L, 0);
+        pay.setAmount(new BigDecimal("100"));
+        when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(pay);
+        Map<String, String> params = notifyParams("TRADE_SUCCESS");
+        params.put("total_amount", "0.01");   // 与支付单不一致
+        assertThat(payService.handleAlipayNotify(params)).isFalse();
+        verify(payInfoMapper, never()).markSuccess(any(), any(), any());
     }
 
     // ----------------------------------------------------------
@@ -215,17 +293,64 @@ class PayServiceTest {
         when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(pay);
         when(refundMapper.insert(any(Refund.class))).thenReturn(1);
         when(orderPayMapper.markRefunding("ORD001")).thenReturn(1);
-        when(alipayGatewayClient.refundPay(eq("P001"), anyString(), any(BigDecimal.class)))
-                .thenReturn("MOCK-REFUND-001");
+        // 渠道返回交易流水号（失败时抛 BizException，不再靠字符串前缀判断）
+        when(alipayGatewayClient.refundPay(eq("P001"), anyString(), any(BigDecimal.class), anyString()))
+                .thenReturn("2026091822001400000001");
         when(refundMapper.markSuccess(any())).thenReturn(1);
         when(orderPayMapper.markRefunded("ORD001")).thenReturn(1);
         when(orderPayMapper.selectMerchantId("ORD001")).thenReturn(100L);
         when(orderPayMapper.selectItems("ORD001")).thenReturn(Collections.emptyList());
-        String refundNo = payService.refund(1001L, "ORD001", "不想要了");
-        assertThat(refundNo).startsWith("R");
+        String tradeNo = payService.refund(1001L, "ORD001", "不想要了");
+        assertThat(tradeNo).isEqualTo("2026091822001400000001");
         verify(orderPayMapper).markRefunding("ORD001");
         verify(orderPayMapper).markRefunded("ORD001");
         verify(orderPayMapper).deductMerchantBalance(eq(100L), any(BigDecimal.class));
+    }
+
+    @Test
+    void refund_channelThrows_marksRefundFailed() {
+        OrderPayMapper.OrderPayView order = mockOrderPayView(1);
+        when(orderPayMapper.selectByOrderNo("ORD001")).thenReturn(order);
+        when(refundMapper.selectCount(any(LambdaQueryWrapper.class))).thenReturn(0L);
+        PayInfo pay = mockPayInfo(1L, 1);
+        pay.setPayNo("P001"); pay.setOrderNo("ORD001");
+        pay.setAmount(new BigDecimal("100")); pay.setOutTradeNo("P001");
+        when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(pay);
+        when(refundMapper.insert(any(Refund.class))).thenReturn(1);
+        when(orderPayMapper.markRefunding("ORD001")).thenReturn(1);
+        when(alipayGatewayClient.refundPay(anyString(), anyString(), any(BigDecimal.class), anyString()))
+                .thenThrow(new BizException("支付宝退款失败: code=ACQ.SYSTEM_ERROR"));
+        assertThatThrownBy(() -> payService.refund(1001L, "ORD001", "不想要了"))
+                .isInstanceOf(BizException.class)
+                .hasMessageContaining("支付宝退款失败");
+        // 渠道失败：订单不应置为已退款，商家余额不扣回
+        verify(orderPayMapper, never()).markRefunded(anyString());
+        verify(orderPayMapper, never()).deductMerchantBalance(anyLong(), any());
+    }
+
+    // ----------------------------------------------------------
+    // closePay
+    // ----------------------------------------------------------
+
+    @Test
+    void closePay_pendingPay_closesChannelAndMarksClosed() {
+        PayInfo pay = mockPayInfo(1L, 0);
+        pay.setOrderNo("ORD001"); pay.setOutTradeNo("P001");
+        when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(pay);
+        when(payInfoMapper.markClosed(1L)).thenReturn(1);
+        payService.closePay("ORD001");
+        verify(alipayGatewayClient).closePay("P001");
+        verify(payInfoMapper).markClosed(1L);
+    }
+
+    @Test
+    void closePay_alreadyPaid_doesNothing() {
+        PayInfo pay = mockPayInfo(1L, 1);
+        pay.setOrderNo("ORD001");
+        when(payInfoMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(pay);
+        payService.closePay("ORD001");
+        verify(alipayGatewayClient, never()).closePay(anyString());
+        verify(payInfoMapper, never()).markClosed(any());
     }
 
     // ----------------------------------------------------------
@@ -259,5 +384,25 @@ class PayServiceTest {
         OrderPayMapper.OrderPayView order = new OrderPayMapper.OrderPayView();
         order.setStatus(status); order.setPayAmount(new BigDecimal("100"));
         return order;
+    }
+
+    /** 构造渠道下单返回的支付凭证 */
+    private PayCreateResult voucher(String payNo, String orderNo, boolean realChannel) {
+        return new PayCreateResult(payNo, orderNo, "100.00",
+                realChannel ? "https://openapi-sandbox.dl.alipaydev.com/gateway.do?x=1" : "http://localhost:5173/pay/" + orderNo,
+                realChannel);
+    }
+
+    /** 构造支付宝异步通知参数（金额与支付单一致，便于入账用例） */
+    private Map<String, String> notifyParams(String tradeStatus) {
+        Map<String, String> params = new HashMap<>();
+        params.put("out_trade_no", "P001");
+        params.put("trade_no", "TRADE001");
+        params.put("trade_status", tradeStatus);
+        params.put("total_amount", "100");
+        params.put("app_id", "2021000000000000");
+        params.put("sign", "MOCK_SIGN");
+        params.put("sign_type", "RSA2");
+        return params;
     }
 }

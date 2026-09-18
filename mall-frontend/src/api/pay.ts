@@ -13,9 +13,28 @@ export interface RefundRecord {
   createTime: string
 }
 
-export const createPay = (orderNo: string) => http.post<never, string>('/pay/create', { orderNo })
+/**
+ * 创建支付单的返回凭证。
+ * realChannel=false 时是本地演示渠道（Mock），前端展示"模拟支付"按钮；
+ * realChannel=true 时是真实支付宝沙箱，前端应跳转 payUrl 到支付宝收银台。
+ */
+export interface PayCreateResult {
+  payNo: string
+  orderNo: string
+  /** 金额字符串（两位小数），避免浮点误差 */
+  amount: string | null
+  /** 支付跳转地址：沙箱=支付宝网关；Mock=本系统演示页 */
+  payUrl: string | null
+  realChannel: boolean
+}
 
-/** 演示用：模拟渠道回调（真实沙箱由支付宝异步通知） */
+export const createPay = (orderNo: string) =>
+  http.post<never, PayCreateResult>('/pay/create', { orderNo })
+
+/** 查询支付凭证（不重复下单） */
+export const getPayInfo = (orderNo: string) => http.get<never, PayCreateResult | null>(`/pay/info/${orderNo}`)
+
+/** 演示用：模拟渠道回调（真实沙箱由支付宝异步通知 /pay/alipay/notify 触发） */
 export const mockPayCallback = (payNo: string, tradeNo: string, amount: number) =>
   http.post('/pay/mock/callback', { payNo, tradeNo, amount })
 
