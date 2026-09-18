@@ -40,6 +40,16 @@ public class MockAlipayClient implements AlipayGatewayClient {
         log.info("[MOCK渠道] 关闭支付: outTradeNo={}", outTradeNo);
     }
 
+    /**
+     * Mock 渠道没有"渠道侧"可查：本地演示的到账由
+     * {@code POST /api/pay/mock/callback} 直接触发同一入账链路。
+     */
+    @Override
+    public PayQueryResult queryPay(String outTradeNo) {
+        log.info("[MOCK渠道] 主动查单: outTradeNo={}（演示渠道无渠道侧状态，恒为未支付）", outTradeNo);
+        return PayQueryResult.notPaid(outTradeNo, "MOCK");
+    }
+
     @Override
     public String refundPay(String outTradeNo, String outRequestNo, BigDecimal amount, String reason) {
         log.info("[MOCK渠道] 退款成功: outTradeNo={}, outRequestNo={}, amount={}",

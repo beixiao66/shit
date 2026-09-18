@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { createPay, getPayStatus, mockPayCallback, type PayCreateResult } from '@/api/pay'
+import { createPay, getPayStatus, mockPayCallback, syncPay, type PayCreateResult } from '@/api/pay'
 import { getMyOrders } from '@/api/order'
 
 const route = useRoute()
@@ -13,6 +13,8 @@ const loading = ref(true)
 const paying = ref(false)
 const paid = ref(false)
 const failed = ref(false)
+/** 订单在下单 30 分钟内未支付被取消（含用户手动取消）——此时渠道交易会被关闭或原路退回 */
+const cancelled = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 /** 是否真实支付宝沙箱渠道（决定展示"去支付宝付款"还是"模拟支付"按钮） */
 const realChannel = computed(() => voucher.value?.realChannel === true)
@@ -67,26 +69,60 @@ async function getAmount() {
   return 1
 }
 
-/** 轮询支付状态（沙箱异步通知入账后，订单状态由后端同步，前端只做展示） */
+/**
+ * 轮询支付状态：优先用 `syncPay`（让后端主动向支付宝查单并补偿入账）。
+ *
+ * 只查本地状态的 `getPayStatus` 在没有公网回调地址时永远不会变 —— 支付宝的异步通知
+ * 到不了 localhost，所以这里必须走"通知为主、查单为辅"里的查单。
+ * 后端对同一支付单有节流（数秒一次），1s 轮询不会打爆渠道。
+ */
 async function pollStatus() {
   clearInterval(timer)
   let ticks = 0
   timer = setInterval(async () => {
     ticks += 1
     try {
-      const ok = await getPayStatus(orderNo.value)
-      if (ok) {
+      const res = await syncPay(orderNo.value)
+      if (res.paid) {
         clearInterval(timer)
         paid.value = true
         ElMessage.success('支付成功，订单已进入商家发货流程')
         router.replace('/orders')
+      } else if (res.payStatus === 3) {
+        // 支付单已关闭（订单被取消）：若已付款则后端已原路退回，别让用户继续在收银台付款
+        clearInterval(timer)
+        cancelled.value = true
+        ElMessage.warning(res.refunded ? '该订单已取消，付款已原路退回' : '该订单已取消，请勿继续付款')
       }
     } catch {
-      /* 网络抖动忽略，继续轮询 */
+      /* 网络抖动/查单瞬时失败忽略，继续轮询 */
     }
     // 沙箱付款耗时不定，轮询 10 分钟；期间用户可手动刷新
     if (ticks >= 600) clearInterval(timer)
   }, 1000)
+}
+
+/** 手动刷新：先做一次查单补偿，再取一次本地状态（用户点"我已付款"时用） */
+async function refreshStatus() {
+  try {
+    const res = await syncPay(orderNo.value)
+    if (res.paid) {
+      clearInterval(timer)
+      paid.value = true
+      ElMessage.success('支付成功，订单已进入商家发货流程')
+      router.replace('/orders')
+      return
+    }
+    if (res.payStatus === 3) {
+      clearInterval(timer)
+      cancelled.value = true
+      ElMessage.warning(res.refunded ? '该订单已取消，付款已原路退回' : '该订单已取消，请勿继续付款')
+      return
+    }
+  } catch {
+    /* 落到下面的本地状态查询 */
+  }
+  paid.value = await getPayStatus(orderNo.value)
 }
 
 onMounted(load)
@@ -108,11 +144,12 @@ onUnmounted(() => clearInterval(timer))
         <template v-if="realChannel">
           <p class="hint">
             已接入支付宝沙箱。<b>点击下方按钮在新窗口打开支付宝收银台</b>，
-            用沙箱买家账号付款；付款完成后支付宝会异步通知本系统并自动跳转回订单页。
+            用沙箱买家账号付款。付款完成后本页会自动向支付宝查单确认（异步通知需要公网
+            <code>notify-base</code>，本机开发靠主动查单兜底），确认到账即自动跳转订单页。
           </p>
           <div class="actions">
             <el-button type="primary" size="large" :disabled="paid" @click="gotoAlipay">前往支付宝付款</el-button>
-            <el-button size="large" :disabled="paid" @click="pollStatus">我已付款，刷新状态</el-button>
+            <el-button size="large" :disabled="paid" @click="refreshStatus">我已付款，刷新状态</el-button>
             <router-link class="back" to="/orders">返回订单列表</router-link>
           </div>
           <p class="polling">正在自动检测支付结果……</p>
@@ -132,6 +169,7 @@ onUnmounted(() => clearInterval(timer))
         </template>
 
         <el-alert v-if="paid" type="success" title="支付成功，已同步订单状态与商家入账" :closable="false" />
+        <el-alert v-if="cancelled" type="warning" title="该订单已取消：渠道交易已关闭，若已付款则已原路退回" :closable="false" />
         <el-alert v-if="failed" type="error" title="支付失败（回调金额不一致被拒）" :closable="false" />
       </template>
     </section>

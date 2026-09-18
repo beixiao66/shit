@@ -5,6 +5,7 @@ import com.mall.common.Result;
 import com.mall.pay.entity.PayInfo;
 import com.mall.pay.gateway.PayCreateResult;
 import com.mall.pay.service.PayService;
+import com.mall.pay.vo.PaySyncResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -95,10 +96,41 @@ public class PayController {
         return Result.ok(payService.isPaid(orderNo));
     }
 
+    /**
+     * 主动查单补偿：让后端向支付宝确认这笔支付单是否已支付，已支付则立即入账。
+     *
+     * <p>为什么前端要调它而不是只轮询 {@code /status}：异步通知要求 {@code notify-base}
+     * 是支付宝能访问到的**公网地址**，本机开发（localhost）收不到通知，
+     * 只靠通知订单会一直停在"待支付"。支付页与同步跳转落地页轮询本接口，
+     * 就能在无公网地址的情况下跑通"付款 → 订单已支付"闭环；
+     * 生产环境它也是通知丢失/延迟时的对账兜底（内部有节流 + 完整幂等）。
+     *
+     * @param orderNo 订单号<b>或</b>支付单号（支付宝同步跳转回传的是支付单号）
+     */
+    @PostMapping("/sync/{orderNo}")
+    public Result<PaySyncResult> sync(@PathVariable String orderNo) {
+        return Result.ok(payService.syncPayStatus(orderNo));
+    }
+
     /** 退款申请（沙箱走 alipay.trade.refund；Mock 即时成功） */
     @PostMapping("/refund")
     public Result<String> refund(@RequestHeader(MallConstants.HEADER_USER_ID) Long userId,
                                  @RequestBody Map<String, String> body) {
         return Result.ok(payService.refund(userId, body.get("orderNo"), body.get("reason")));
+    }
+
+    /**
+     * 关闭渠道支付单（订单取消/超时取消时调用；幂等）。
+     *
+     * <p>用途：订单取消后立刻关掉支付宝侧交易，用户手里那个还开着的收银台页面就付不了了。
+     * 定时任务 {@code PayCloseSweeper} 是兜底（默认每分钟扫一次），这里是"当场关掉"的入口，
+     * 供 order-service 编排调用（Feign/MQ，见迭代记录遗留项）或运维手工调用。
+     *
+     * @param orderNo 订单号或支付单号
+     */
+    @PostMapping("/close/{orderNo}")
+    public Result<Void> close(@PathVariable String orderNo) {
+        payService.closePay(orderNo);
+        return Result.ok();
     }
 }

@@ -28,6 +28,18 @@ public interface AlipayGatewayClient {
     void closePay(String outTradeNo);
 
     /**
+     * 主动查单：向渠道确认这笔支付单在渠道侧的真实状态。
+     *
+     * <p>用途是"通知为主、查单为辅"里的辅：异步通知要求回调地址公网可达，
+     * 本机开发收不到、生产也可能延迟丢包，靠它才能确认钱到底到没到。
+     *
+     * @param outTradeNo 本系统支付单号（渠道侧 out_trade_no）
+     * @return 查单结果；{@link PayQueryResult#paid()} 为 true 才可入账
+     * @throws com.mall.common.BizException 渠道调用本身失败（网络/配置/签名错误）
+     */
+    PayQueryResult queryPay(String outTradeNo);
+
+    /**
      * 渠道退款。
      * outRequestNo 为幂等标识：同单重试传相同值，渠道只退一次。
      *

@@ -7,9 +7,11 @@ import com.mall.pay.entity.Refund;
 import com.mall.pay.gateway.AlipayGatewayClient;
 import com.mall.pay.gateway.AlipaySandboxClient;
 import com.mall.pay.gateway.PayCreateResult;
+import com.mall.pay.gateway.PayQueryResult;
 import com.mall.pay.mapper.OrderPayMapper;
 import com.mall.pay.mapper.PayInfoMapper;
 import com.mall.pay.mapper.RefundMapper;
+import com.mall.pay.vo.PaySyncResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -229,6 +231,224 @@ public class PayService {
     }
 
     // -----------------------------------------------------
+    // 主动查单补偿（通知为主、查单为辅）
+    // -----------------------------------------------------
+
+    /** 同一支付单向渠道查单的最小间隔（秒）：前端 1s 轮询，靠它避免把渠道查询打爆 */
+    private static final long QUERY_THROTTLE_SECONDS = 3;
+
+    /** 对账标记存活时长（小时）：关单/退款各一次就够，避免定时任务反复打渠道 */
+    private static final long RECONCILE_MARK_HOURS = 6;
+
+    /**
+     * 主动查单补偿：向渠道确认这笔支付单是否真的付了，付了就走<b>与异步通知完全相同</b>的幂等入账链路。
+     *
+     * <p>为什么必须要有：异步通知要求 {@code notify_url} 公网可达 —— 本机开发（localhost）永远收不到，
+     * 生产也可能因抖动/丢包延迟甚至丢失。只依赖通知的支付模块，在这两种情况下都会出现
+     * "用户钱付了、订单还是待支付"。通行做法是：<b>通知负责实时入账，查单负责兜底对账</b>。
+     *
+     * <p>三种结局（见 {@link PaySyncResult}）：已入账 / 未支付 / <b>悬挂款已退回</b>。
+     * 最后一种是：本地支付单已关闭（订单被取消或超时）但用户仍完成了付款 ——
+     * 这种钱不能入账（订单没了），只能原路退回。
+     *
+     * <p>幂等：入账复用 {@link #handleCallback}（Redisson 锁 + {@code status=0} 条件更新 + 唯一索引），
+     * 与异步通知同时到达也不会重复入账；退款按支付单查重，只退一次。
+     *
+     * <p>节流：{@value #QUERY_THROTTLE_SECONDS} 秒内同一支付单只查一次渠道（Redis SETNX），
+     * 前端 1s 轮询不会把渠道打爆。
+     *
+     * @param no 订单号或支付单号（支付宝同步跳转回传的是支付单号，两种都要认，见 {@link #findForSync}）
+     */
+    @Transactional
+    public PaySyncResult syncPayStatus(String no) {
+        PayInfo pay = findForSync(no);
+        if (pay == null) {
+            throw new BizException("支付单不存在");
+        }
+        if (pay.getStatus() == 1) {
+            return PaySyncResult.of(true, false, pay.getStatus());   // 已入账：不必再问渠道
+        }
+        if (pay.getStatus() == 3) {
+            // 已关闭（订单被取消）：不再谈"入账"，交给对账 —— 渠道没付就关掉交易，付了就原路退回
+            boolean refunded = alipayGatewayClient.isRealChannel() && reconcileClosedPay(pay);
+            return PaySyncResult.of(false, refunded, pay.getStatus());
+        }
+        if (pay.getStatus() == 2) {
+            return PaySyncResult.pending(pay.getStatus());           // 失败态：不再查询
+        }
+        if (!alipayGatewayClient.isRealChannel()) {
+            // Mock 渠道没有渠道侧状态可查，本地演示由 /api/pay/mock/callback 触发入账
+            return PaySyncResult.pending(pay.getStatus());
+        }
+        if (!tryAcquireQueryPermit(pay.getPayNo())) {
+            return PaySyncResult.pending(pay.getStatus());           // 节流窗口内已查过
+        }
+        PayQueryResult result = alipayGatewayClient.queryPay(pay.getOutTradeNo());
+        if (!result.paid()) {
+            return PaySyncResult.pending(pay.getStatus());
+        }
+        if (!amountMatches(pay, result)) {
+            return PaySyncResult.pending(pay.getStatus());
+        }
+        // 与异步通知一致的入账体："amount=<渠道实付>"，由 handleCallback 完成金额核对与幂等入账
+        handleCallback(pay.getPayNo(), result.tradeNo(), "amount=" + result.totalAmount().toPlainString());
+        log.info("[PAY] 主动查单补偿入账成功: payNo={}, orderNo={}, tradeNo={}",
+                pay.getPayNo(), pay.getOrderNo(), result.tradeNo());
+        return PaySyncResult.of(true, false, 1);
+    }
+
+    /**
+     * 已关闭支付单的渠道对账：<b>关单补偿 + 悬挂款退回</b>。
+     *
+     * <p>为什么需要：订单取消只关了本地 {@code pay_info}（order-service 的取消链路是单库直写，
+     * 项目里也没有服务间 HTTP 调用），<b>渠道交易当时并没有关</b>。只要用户的收银台页面还开着，
+     * 他仍然可以付款成功 —— 钱付了、订单没了（实测踩过）。本方法把这类支付单收口：
+     *
+     * <ol>
+     *   <li>渠道未支付 → 调 {@code alipay.trade.close} 关掉交易，收银台再付会被告知"交易已关闭"</li>
+     *   <li>渠道已支付 → 走 {@link #refundStranded} 原路退回（订单已取消，入账会让账目对不上）</li>
+     * </ol>
+     *
+     * <p>幂等/多实例：每笔用 Redis 标记 {@code pay:reconciled:{payNo}}（TTL 6 小时）避免反复对账；
+     * 渠道调用抛异常时<b>不打标</b>，下一轮定时任务会重试。
+     *
+     * <p>入口有两个：前端轮询的 {@link #syncPayStatus}（用户正看着页面时），
+     * 以及定时任务 {@code PayCloseSweeper}（没人看页面时的兜底）。
+     *
+     * @return true = 本次把钱退回去了（或此前已退过）
+     */
+    @Transactional
+    public boolean reconcileClosedPay(PayInfo pay) {
+        if (reconciledBefore(pay.getPayNo())) {
+            return false;
+        }
+        PayQueryResult result = alipayGatewayClient.queryPay(pay.getOutTradeNo());
+        if (!result.paid()) {
+            alipayGatewayClient.closePay(pay.getOutTradeNo());
+            markReconciled(pay.getPayNo());
+            log.info("[PAY] 关单补偿完成（渠道交易已关闭，不能再付款）: payNo={}, orderNo={}",
+                    pay.getPayNo(), pay.getOrderNo());
+            return false;
+        }
+        if (!amountMatches(pay, result)) {
+            // 金额对不上：既不退款也不打标，留给后续对账继续暴露，等人工介入
+            return false;
+        }
+        boolean refunded = refundStranded(pay, result);
+        markReconciled(pay.getPayNo());
+        return refunded;
+    }
+
+    /**
+     * 渠道实付金额必须与支付单一致，否则不入账也不退款（先记录，人工介入）。
+     * 金额核对是支付安全的核心，任何一条入账/退款路径都不能绕过。
+     */
+    private boolean amountMatches(PayInfo pay, PayQueryResult result) {
+        if (result.totalAmount() == null) {
+            log.warn("[PAY] 查单显示已支付但未返回金额，暂不处理: payNo={}, tradeNo={}",
+                    pay.getPayNo(), result.tradeNo());
+            return false;
+        }
+        if (result.totalAmount().compareTo(pay.getAmount()) != 0) {
+            log.error("[PAY] 查单金额与支付单不一致，拒绝入账/退款: payNo={}, 渠道={}, 本地={}",
+                    pay.getPayNo(), result.totalAmount(), pay.getAmount());
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 悬挂款处理：本地支付单已关闭（订单被取消/超时），但渠道侧显示用户已完成付款 → 原路退回。
+     *
+     * <p>为什么会有这种钱：订单取消链路只关了本地的 {@code pay_info}（单库直写约定），
+     * 渠道侧的支付宝交易未必同时关闭，用户在收银台仍可能付款成功 —— 钱付了、订单没了。
+     * 这种钱绝不能入账（订单已取消，账目会对不上），正确做法是原路退回。
+     *
+     * <p>预防措施见 {@code AlipaySandboxClient#createPay}：创建支付时带
+     * {@code timeout_express}，让支付宝侧交易与订单超时同步到期，过期即不可支付。
+     *
+     * @return true = 本次真的发起了退款（或此前已退过）
+     */
+    private boolean refundStranded(PayInfo pay, PayQueryResult result) {
+        // 幂等：同一支付单只退一次（退款表查询 + uk_out_request_no 唯一索引兜底）
+        long exists = refundMapper.selectCount(new LambdaQueryWrapper<Refund>()
+                .eq(Refund::getPayNo, pay.getPayNo())
+                .in(Refund::getStatus, 0, 1));
+        if (exists > 0) {
+            log.info("[PAY] 悬挂款此前已发起退款，跳过: payNo={}", pay.getPayNo());
+            return true;
+        }
+        Refund refund = new Refund();
+        refund.setRefundNo(genNo("R"));
+        refund.setPayNo(pay.getPayNo());
+        refund.setOrderNo(pay.getOrderNo());
+        refund.setAmount(pay.getAmount());
+        refund.setOutRequestNo(refund.getRefundNo());
+        refund.setReason("订单已取消但用户仍完成付款，系统自动原路退回");
+        refund.setStatus(0);
+        refundMapper.insert(refund);
+        String tradeNo = alipayGatewayClient.refundPay(
+                pay.getOutTradeNo(), refund.getOutRequestNo(), refund.getAmount(), refund.getReason());
+        refundMapper.markSuccess(refund.getId());
+        log.warn("[PAY] 悬挂款已原路退回: payNo={}, orderNo={}, amount={}, 渠道流水={}",
+                pay.getPayNo(), pay.getOrderNo(), pay.getAmount(), tradeNo);
+        return true;
+    }
+
+    /**
+     * 按订单号<b>或</b>支付单号查支付单。
+     *
+     * <p>为什么要兼容两者：支付宝同步跳转（{@code return_url}）回传的 {@code out_trade_no}
+     * 是本系统的<b>支付单号</b>（{@code pay_info.out_trade_no = pay_no}），不是订单号。
+     * 落地页拿它回来查状态时，只按订单号查会永远查不到 ——
+     * 实测踩过：付款成功却一直显示"尚未确认到账"。
+     */
+    public PayInfo findForSync(String no) {
+        PayInfo pay = findByOrderNo(no);
+        if (pay != null) {
+            return pay;
+        }
+        return payInfoMapper.selectOne(new LambdaQueryWrapper<PayInfo>().eq(PayInfo::getPayNo, no));
+    }
+
+    /**
+     * 查单节流许可：Redis {@code SETNX + TTL} 实现"同一支付单 N 秒内只查一次渠道"。
+     * Redis 异常时放行（宁可多查几次，也不能让用户永远看不到支付结果）。
+     */
+    private boolean tryAcquireQueryPermit(String payNo) {
+        try {
+            return redissonClient.getBucket("pay:query:" + payNo)
+                    .trySet("1", QUERY_THROTTLE_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.warn("[PAY] 查单节流不可用(Redis 异常)，本次直接查渠道: payNo={}, err={}", payNo, e.getMessage());
+            return true;
+        }
+    }
+
+    /** 该支付单是否已经对账过（关闭/退款都算），避免定时任务反复打扰渠道 */
+    public boolean isReconciled(String payNo) {
+        return reconciledBefore(payNo);
+    }
+
+    private boolean reconciledBefore(String payNo) {
+        try {
+            return redissonClient.getBucket("pay:reconciled:" + payNo).isExists();
+        } catch (Exception e) {
+            log.warn("[PAY] 对账标记读取失败(Redis 异常)，本次仍继续对账: payNo={}, err={}", payNo, e.getMessage());
+            return false;
+        }
+    }
+
+    private void markReconciled(String payNo) {
+        try {
+            redissonClient.getBucket("pay:reconciled:" + payNo)
+                    .set("1", RECONCILE_MARK_HOURS, TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.warn("[PAY] 写入对账标记失败: payNo={}, err={}", payNo, e.getMessage());
+        }
+    }
+
+    // -----------------------------------------------------
     // 退款
     // -----------------------------------------------------
 
@@ -299,14 +519,29 @@ public class PayService {
                 .eq(PayInfo::getOrderNo, orderNo));
     }
 
-    /** 订单超时取消/用户取消时关闭渠道支付单，避免对已取消订单继续付款 */
+    /**
+     * 关闭渠道支付单（订单取消/超时取消时调用，避免对已取消订单继续付款）。
+     *
+     * <p>两种情形都要处理：
+     * <ul>
+     *   <li>支付单还是"待支付"：关渠道交易 + 本地置关闭</li>
+     *   <li>本地已被置关闭（order-service 取消链路直写 {@code pay_info.status=3}）：
+     *       渠道交易可能还开着，走 {@link #reconcileClosedPay} 关掉它（或退回已收的钱）</li>
+     * </ul>
+     */
     public void closePay(String orderNo) {
-        PayInfo pay = findByOrderNo(orderNo);
-        if (pay == null || pay.getStatus() != 0) {
+        PayInfo pay = findForSync(orderNo);
+        if (pay == null) {
             return;
         }
-        alipayGatewayClient.closePay(pay.getOutTradeNo());
-        payInfoMapper.markClosed(pay.getId());
+        if (pay.getStatus() == 0) {
+            alipayGatewayClient.closePay(pay.getOutTradeNo());
+            payInfoMapper.markClosed(pay.getId());
+            return;
+        }
+        if (pay.getStatus() == 3 && alipayGatewayClient.isRealChannel()) {
+            reconcileClosedPay(pay);
+        }
     }
 
     // -----------------------------------------------------

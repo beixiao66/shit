@@ -36,8 +36,32 @@ public class AlipayProperties {
     /** 应用私钥（RSA2 / PKCS8，单行 Base64） */
     private String privateKey;
 
-    /** 支付宝公钥（RSA2 / PKIX，单行 Base64，用于回调验签） */
+    /** 支付宝公钥（RSA2 / PKIX，单行 Base64，用于回调验签）。公钥模式必填；证书模式下不需要（验签公钥取自 alipay-public-cert-path） */
     private String alipayPublicKey;
+
+    /**
+     * 加签模式：{@code publicKey}（默认，公钥模式）或 {@code cert}（证书模式）。
+     *
+     * <p>选择依据：支付宝控制台提示<b>资金支出类接口（退款等）必须使用证书模式</b>，
+     * 故项目默认推荐 {@code cert}。两种模式本项目都已实测可用：
+     * 公钥模式配好"应用公钥 ↔ 应用私钥"同样能收款。
+     *
+     * <p>⚠️ 历史误判更正：早期迭代记录里写过"沙箱中公钥模式会被拒(invalid-signature)"，
+     * 那是**误判**——真正的原因是跳转地址取错了（POST 表单的 action 里没有 biz_content，
+     * 见 {@code AlipaySandboxClient#buildGatewayUrl}），与加签模式无关。
+     * 换证书模式之所以曾经"看起来也不行"，是因为当时粘的私钥与下载到的应用公钥证书不是同一对
+     * （现由启动预检 {@code AlipayKeyInspector} 直接拦下并打印双方指纹）。
+     */
+    private String signMode = "publicKey";
+
+    /** 证书模式-应用公钥证书路径（appPublicCert.crt） */
+    private String appCertPath;
+
+    /** 证书模式-支付宝公钥证书路径（alipayPublicCert.crt） */
+    private String alipayPublicCertPath;
+
+    /** 证书模式-支付宝根证书路径（alipayRootCert.crt） */
+    private String alipayRootCertPath;
 
     /** 支付宝网关：沙箱用 openapi-sandbox，生产用 openapi */
     private String gatewayUrl = "https://openapi-sandbox.dl.alipaydev.com/gateway.do";
@@ -65,9 +89,26 @@ public class AlipayProperties {
     /** 发起支付时默认的商品标题前缀 */
     private String subjectPrefix = "Mall-X 订单 ";
 
-    /** 是否已具备真实渠道条件（三个必填项齐全） */
+    /** 是否证书模式 */
+    public boolean certMode() {
+        return "cert".equalsIgnoreCase(signMode);
+    }
+
+    /** 证书模式所需三项是否齐全 */
+    public boolean certFilesPresent() {
+        return notBlank(appCertPath) && notBlank(alipayPublicCertPath) && notBlank(alipayRootCertPath);
+    }
+
+    /**
+     * 是否已具备真实渠道条件。
+     * 公钥模式需 appId + 应用私钥 + 支付宝公钥；证书模式需 appId + 应用私钥 + 三个证书
+     * （证书模式不需要"支付宝公钥"文本：验签公钥取自支付宝公钥证书，见 AlipaySandboxClient#verifyNotify）。
+     */
     public boolean configured() {
-        return notBlank(appId) && notBlank(privateKey) && notBlank(alipayPublicKey);
+        if (!notBlank(appId) || !notBlank(privateKey)) {
+            return false;
+        }
+        return certMode() ? certFilesPresent() : notBlank(alipayPublicKey);
     }
 
     /** 真实沙箱渠道是否生效 */
